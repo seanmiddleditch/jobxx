@@ -48,6 +48,7 @@ namespace jobxx
 
         struct parked_thread
         {
+            std::mutex lock;
             std::condition_variable signal;
             parked_thread* prev = nullptr;
             parked_thread* next = nullptr;
@@ -58,16 +59,22 @@ namespace jobxx
             // FIXME: use a atomic linked list, though note that
             // we may need to keep a mutex to pair with the
             // condition_variable.
-            std::mutex park_lock;
-            parked_thread* threads = nullptr;
+            std::mutex lock;
+            parked_thread* head = nullptr;
         };
 
-        struct concurrent_queue
+        class concurrent_queue
         {
+        public:
+            inline void push_back(_detail::task* task);
+            inline _detail::task* pop_front();
+            inline bool maybe_empty() const;
+
+        private:
             // FIXME: temporary "just works" data-structure to be
             // replaced by "lock-free" structure
-            std::mutex task_lock;
-            std::deque<_detail::task*> tasks;
+            mutable std::mutex _lock;
+            std::deque<_detail::task*> _queue;
         };
 
         struct queue
@@ -80,6 +87,33 @@ namespace jobxx
             parking_lot parked;
         };
 
+
+        void concurrent_queue::push_back(_detail::task* task)
+        {
+            std::lock_guard<std::mutex> _(_lock);
+            _queue.push_back(task);
+        }
+
+        _detail::task* concurrent_queue::pop_front()
+        {
+            std::lock_guard<std::mutex> _(_lock);
+            if (!_queue.empty())
+            {
+                _detail::task* item = _queue.front();
+                _queue.pop_front();
+                return item;
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+
+        bool concurrent_queue::maybe_empty() const
+        {
+            std::lock_guard<std::mutex> _(_lock);
+            return _queue.empty();
+        }
     }
 
 }
