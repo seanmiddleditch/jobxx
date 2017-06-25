@@ -103,13 +103,13 @@ void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
 
     _detail::task* item = new _detail::task{std::move(work), parent};
 
-	std::unique_lock<std::mutex> task_lock;
+	std::lock_guard<std::mutex> _(task_lock);
 	tasks.push_back(item);
 }
 
 jobxx::_detail::task* jobxx::_detail::queue::pull_task()
 {
-	std::unique_lock<std::mutex> task_lock;
+	std::lock_guard<std::mutex> _(task_lock);
 	if (!tasks.empty())
 	{
 		_detail::task* item = tasks.front();
