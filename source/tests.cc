@@ -32,6 +32,9 @@
 #include "jobxx/queue.h"
 #include "jobxx/job.h"
 
+#include <thread>
+#include <atomic>
+
 bool basic_test()
 {
 	// execute the test 10 times in naive hopes of catching races
@@ -67,7 +70,41 @@ bool basic_test()
 	return true;
 }
 
+bool thread_test()
+{
+	jobxx::queue queue;
+	std::atomic<bool> done = false;
+
+	std::thread worker([&queue, &done]()
+	{
+		while (!done)
+		{
+			queue.work_all();
+		}
+	});
+
+	std::atomic<int> counter = 0;
+	for (int inc = 1; inc != 5; ++inc)
+	{
+		for (int ji = 0; ji != 1000; ++ji)
+		{
+			queue.spawn_task([&counter, inc](){ counter += inc; });
+		}
+	}
+
+	while (counter != (1000 + 2000 + 3000 + 4000))
+	{
+		queue.work_all();
+	}
+
+	done = true;
+
+	worker.join();
+
+	return true;
+}
+
 int main()
 {
-	return !basic_test();
+	return !(basic_test() && thread_test());
 }
