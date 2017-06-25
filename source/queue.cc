@@ -31,7 +31,7 @@
 
 #include "jobxx/queue.h"
 #include "jobxx/job.h"
-#include "jobxx/task.h"
+#include "jobxx/_detail/task.h"
 
 namespace jobxx
 {
@@ -83,11 +83,11 @@ namespace jobxx
         {
             parent->_add_task();
         }
-        task item{std::move(work), parent};
+        _detail::task item{std::move(work), parent};
         _execute(item);
     }
 
-    void queue::_execute(task& item)
+    void queue::_execute(_detail::task& item)
     {
         if (item.work)
         {

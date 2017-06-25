@@ -32,16 +32,21 @@
 #define _guard_JOBXX_DELEGATE_H
 #pragma once
 
+#include <utility>
+
 namespace jobxx
 {
 
     class delegate
     {
     public:
+        static constexpr int max_size = sizeof(void*) * 3;
+        static constexpr int max_alignment = alignof(double);
+
         template <typename FunctionT>
         /*implicit*/ delegate(FunctionT&& func)
         {
-            _thunk = [](void* f){ (*static_cast<FunctionT*>(f))(); }
+            _thunk = [](void* f){ (*static_cast<FunctionT*>(f))(); };
             _function = &func;
             // FIXME: won't work with types that overload operator&,
             // but I don't want to pull in <memory> if I can avoid it

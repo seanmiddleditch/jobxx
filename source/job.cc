@@ -30,14 +30,13 @@
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
 #include "jobxx/job.h"
-#include "jobxx/task.h"
 
 namespace jobxx
 {
    
     struct job::impl
     {
-        std::atomic<int> refs = 0;
+        std::atomic<int> refs = 1;
         std::atomic<int> tasks = 0;
     };
 
@@ -76,6 +75,7 @@ namespace jobxx
             if (--_impl->refs == 0)
             {
                 delete _impl;
+				_impl = nullptr;
             }
         }
     }
