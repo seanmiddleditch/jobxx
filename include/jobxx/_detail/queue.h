@@ -64,6 +64,9 @@ namespace jobxx
             std::mutex task_lock;
             std::deque<_detail::task*> tasks;
 
+            // FIXME: use a atomic linked list, though note that
+            // we may need to keep a mutex to pair with the
+            // condition_variable.
             std::mutex park_lock;
             parked_thread* parked = nullptr;
         };

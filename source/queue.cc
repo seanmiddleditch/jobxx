@@ -39,7 +39,8 @@ jobxx::queue::queue() : _impl(new _detail::queue) {}
 
 jobxx::queue::~queue()
 {
-    work_all();
+    work_all(); // finish any remaining tasks
+    unpark_all(); // unpark any threads - FIXME: diallow re-parking
     delete _impl;
 }
 
@@ -48,7 +49,9 @@ void jobxx::queue::wait_job_actively(job const& awaited)
     while (!awaited.complete())
     {
         work_one();
-        // FIXME: back-off/sleep if work_one has no work
+        // FIXME: park if work_one has no work, but only
+        //  when we support parking on both a queue and a
+        //  job. until then, back-off may be appropriate.
     }
 }
 
@@ -71,7 +74,7 @@ void jobxx::queue::work_all()
 {
     while (work_one())
     {
-        // keep looping
+        // keep looping while there's work
     }
 }
 
@@ -101,6 +104,10 @@ void jobxx::queue::park(predicate pred)
     }
 
     // remove thread from list of parked threads
+    // FIXME: this is the race mentioned in spawn_task, and
+    // we should instead here assume that we've been unparked
+    // at this point, and repark ourselves if the condition
+    // variable was "spuriously" woken.
     {
         std::lock_guard<std::mutex> _(_impl->park_lock);
 
