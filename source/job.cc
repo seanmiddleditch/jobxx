@@ -30,26 +30,35 @@
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
 #include "jobxx/job.h"
+#include "jobxx/_detail/job.h"
 
 namespace jobxx
 {
-   
-    struct job::impl
-    {
-        std::atomic<int> refs = 1;
-        std::atomic<int> tasks = 0;
-    };
+
+	job::~job()
+	{
+		if (_impl != nullptr && 0 == --_impl->refs)
+		{
+			delete _impl;
+		}
+	}
 
     job& job::operator=(job&& rhs)
     {
         if (this != &rhs)
         {
-            _dec_ref();
+			if (_impl != nullptr && 0 == --_impl->refs)
+			{
+				delete _impl;
+			}
 
             _impl = rhs._impl;
             rhs._impl = nullptr;
 
-            _add_ref();
+			if (_impl != nullptr)
+			{
+				++_impl->refs;
+			}
         }
 
         return *this;
@@ -60,60 +69,16 @@ namespace jobxx
         return _impl == nullptr || _impl->tasks == 0;
     }
 
-    void job::_add_ref()
-    {
-        if (_impl != nullptr)
-        {
-            ++_impl->refs;
-        }
-    }
+	_detail::job* job::_get_impl()
+	{
+		// FIXME: this is racy if two threads try to spawn
+		// tasks in an empty job at the same time.
+		if (_impl == nullptr)
+		{
+			_impl = new _detail::job;
+		}
 
-    void job::_dec_ref()
-    {
-        if (_impl != nullptr)
-        {
-            if (--_impl->refs == 0)
-            {
-                delete _impl;
-				_impl = nullptr;
-            }
-        }
-    }
-
-    void job::_add_task()
-    {
-        // create impl if it doesn't yet exist
-        // e.g. for a default-constructed job
-        // or a moved-from job
-        if (_impl == nullptr)
-        {
-            _impl = new impl;
-        }
-
-        // increment the number of pending tasks
-        // and if this is the first task, add a
-        // reference so the job isn't deleted
-        // before the task completes. we only do
-        // this count on the first/last task to
-        // avoid excessive reference counting.
-        if (0 == _impl->tasks++)
-        {
-            ++_impl->refs;
-        }
-    }
-
-    void job::_complete_task()
-    {
-        // decrement the number of outstanding
-        // tasks. if this is the last task that
-        // was pending, also remove the reference
-        // count we added when the first task was
-        // added, since there are no longer any
-        // tasks referencing the job.
-        if (_impl != nullptr && 0 == --_impl->tasks)
-        {
-            _dec_ref();
-        }
-    }
+		return _impl;
+	}
 
 }

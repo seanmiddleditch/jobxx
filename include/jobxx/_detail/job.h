@@ -28,70 +28,24 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_QUEUE_H)
-#define _guard_JOBXX_QUEUE_H
+#if !defined(_guard_JOBXX_DETAIL_JOB_H)
+#define _guard_JOBXX_DETAIL_JOB_H
 #pragma once
 
-#include "delegate.h"
-#include <utility>
+#include <atomic>
 
 namespace jobxx
 {
-
-    class job;
-    namespace _detail
+	namespace _detail
 	{
-		struct task;
-		struct job;
-	}
 
-    class queue
-    {
-    public:
-        queue();
-        ~queue();
+		struct job
+		{
+			std::atomic<int> refs = 1;
+			std::atomic<int> tasks = 0;
+		};
 
-        queue(queue const&) = delete;
-        queue& operator=(queue const&) = delete;
-
-        template <typename FunctionT> job spawn_job(FunctionT&& work);
-        template <typename FunctionT> job& spawn_task(job& parent, FunctionT&& work);
-        template <typename FunctionT> void spawn_task(FunctionT&& work);
-
-        void wait_job_actively(job const& awaited);
-
-        bool work_one();
-        void work_all();
-
-    private:
-        struct impl;
-
-        job _spawn_job(delegate work);
-        void _spawn_task(delegate work, _detail::job* parent);
-        void _execute(_detail::task& item);
-
-        impl* _impl = nullptr;
-    };
-
-    template <typename FunctionT>
-    job queue::spawn_job(FunctionT&& work)
-    {
-        return _spawn_job(std::forward<FunctionT>(work));
-    }
-
-    template <typename FunctionT>
-    job& queue::spawn_task(job& parent, FunctionT&& work)
-    {
-        _spawn_task(std::forward<FunctionT>(work), parent->_get_impl());
-        return parent;
-    }
-
-    template <typename FunctionT>
-    void queue::spawn_task(FunctionT&& work)
-    {
-        _spawn_task(std::forward<FunctionT>(work), nullptr);
-    }
-
+	}    
 }
 
-#endif // defined(_guard_JOBXX_QUEUE_H)
+#endif // defined(_guard_JOBXX_DETAIL_JOB_H)

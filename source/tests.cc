@@ -38,5 +38,6 @@ int main()
 
     int num = 0x1337c0de;
     auto job = queue.spawn_job([&]{ num = 0xdeadbeef; });
+	queue.wait_job_actively(job);
     return num == 0xdeadbeef ? 0 : 1; // 0 is success for main retcode
 }

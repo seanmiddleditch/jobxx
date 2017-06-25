@@ -32,6 +32,7 @@
 #include "jobxx/queue.h"
 #include "jobxx/job.h"
 #include "jobxx/_detail/task.h"
+#include "jobxx/_detail/job.h"
 
 namespace jobxx
 {
@@ -73,18 +74,28 @@ namespace jobxx
     job queue::_spawn_job(delegate work)
     {
         job j;
-        _spawn_task(std::move(work), &j);
+        _spawn_task(std::move(work), j._get_impl());
         return j;
     }
 
-    void queue::_spawn_task(delegate work, job* parent)
+    void queue::_spawn_task(delegate work, _detail::job* parent)
     {
         if (parent != nullptr)
         {
-            parent->_add_task();
+			// increment the number of pending tasks
+			// and if this is the first task, add a
+			// reference so the job isn't deleted
+			// before the task completes. we only do
+			// this count on the first/last task to
+			// avoid excessive reference counting.
+			if (0 == parent->tasks++)
+			{
+				++parent->refs;
+			}
         }
+
         _detail::task item{std::move(work), parent};
-        _execute(item);
+        _execute(item); // FIXME: schedule for later execution
     }
 
     void queue::_execute(_detail::task& item)
@@ -96,7 +107,19 @@ namespace jobxx
 
         if (item.parent != nullptr)
         {
-            item.parent->_complete_task();
+			// decrement the number of outstanding
+			// tasks. if this is the last task that
+			// was pending, also remove the reference
+			// count we added when the first task was
+			// added, since there are no longer any
+			// tasks referencing the job.
+			if (item.parent != nullptr && 0 == --item.parent->tasks)
+			{
+				if (0 == --item.parent->refs)
+				{
+					delete item.parent;
+				}
+			}
         }
     }
 

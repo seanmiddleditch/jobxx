@@ -28,8 +28,8 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_TASK_H)
-#define _guard_JOBXX_TASK_H
+#if !defined(_guard_JOBXX_DETAIL_TASK_H)
+#define _guard_JOBXX_DETAIL_TASK_H
 #pragma once
 
 #include "jobxx/delegate.h"
@@ -51,4 +51,4 @@ namespace jobxx
     }    
 }
 
-#endif // defined(_guard_JOBXX_TASK_H)
+#endif // defined(_guard_JOBXX_DETAIL_TASK_H)
