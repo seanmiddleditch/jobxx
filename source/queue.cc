@@ -84,10 +84,10 @@ void jobxx::queue::park(predicate pred)
 
     // add thread to list of parked threads
     {
-        std::lock_guard<std::mutex> _(_impl->park_lock);
+        std::lock_guard<std::mutex> _(_impl->parked.park_lock);
 
-        parked.next = _impl->parked;
-        _impl->parked = &parked;
+        parked.next = _impl->parked.threads;
+        _impl->parked.threads = &parked;
         if (parked.next != nullptr)
         {
             parked.next->prev = &parked;
@@ -96,10 +96,10 @@ void jobxx::queue::park(predicate pred)
 
     // wait until a task is available or the predicate fires
     {
-        std::unique_lock<std::mutex> lock(_impl->task_lock);
+        std::unique_lock<std::mutex> lock(_impl->tasks.task_lock);
         parked.signal.wait(lock, [this, &parked, &pred]()
         {
-            return !_impl->tasks.empty() || (pred && pred());
+            return !_impl->tasks.tasks.empty() || (pred && pred());
         });
     }
 
@@ -109,7 +109,7 @@ void jobxx::queue::park(predicate pred)
     // at this point, and repark ourselves if the condition
     // variable was "spuriously" woken.
     {
-        std::lock_guard<std::mutex> _(_impl->park_lock);
+        std::lock_guard<std::mutex> _(_impl->parked.park_lock);
 
         if (parked.next != nullptr)
         {
@@ -119,17 +119,17 @@ void jobxx::queue::park(predicate pred)
         {
             parked.prev->next = parked.next;
         }
-        if (&parked == _impl->parked)
+        if (&parked == _impl->parked.threads)
         {
-            _impl->parked = parked.next;
+            _impl->parked.threads = parked.next;
         }
     }
 }
 
 void jobxx::queue::unpark_all()
 {
-    std::lock_guard<std::mutex> _(_impl->park_lock);
-    for (_detail::parked_thread* parked = _impl->parked; parked != nullptr; parked = parked->next)
+    std::lock_guard<std::mutex> _(_impl->parked.park_lock);
+    for (_detail::parked_thread* parked = _impl->parked.threads; parked != nullptr; parked = parked->next)
     {
         parked->signal.notify_one();
     }
@@ -164,8 +164,8 @@ void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
     _detail::task* item = new _detail::task{std::move(work), parent};
 
     {
-        std::lock_guard<std::mutex> _(task_lock);
-        tasks.push_back(item);
+        std::lock_guard<std::mutex> _(tasks.task_lock);
+        tasks.tasks.push_back(item);
     }
 
     {
@@ -174,21 +174,21 @@ void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
         // here and then wake it, and rely on the thread re-parking itself if
         // there's no work when it wakes up. will need to figure out how to do
         // that with condition_variable sanely, if possible.
-        std::lock_guard<std::mutex> _(park_lock);
-        if (parked != nullptr)
+        std::lock_guard<std::mutex> _(parked.park_lock);
+        if (parked.threads != nullptr)
         {
-            parked->signal.notify_one();
+            parked.threads->signal.notify_one();
         }
     }
 }
 
 jobxx::_detail::task* jobxx::_detail::queue::pull_task()
 {
-    std::lock_guard<std::mutex> _(task_lock);
-    if (!tasks.empty())
+    std::lock_guard<std::mutex> _(tasks.task_lock);
+    if (!tasks.tasks.empty())
     {
-        _detail::task* item = tasks.front();
-        tasks.pop_front();
+        _detail::task* item = tasks.tasks.front();
+        tasks.tasks.pop_front();
         return item;
     }
     else

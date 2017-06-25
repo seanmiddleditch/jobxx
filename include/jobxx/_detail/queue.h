@@ -53,22 +53,31 @@ namespace jobxx
             parked_thread* next = nullptr;
         };
 
+        struct parking_lot
+        {
+            // FIXME: use a atomic linked list, though note that
+            // we may need to keep a mutex to pair with the
+            // condition_variable.
+            std::mutex park_lock;
+            parked_thread* threads = nullptr;
+        };
+
+        struct concurrent_queue
+        {
+            // FIXME: temporary "just works" data-structure to be
+            // replaced by "lock-free" structure
+            std::mutex task_lock;
+            std::deque<_detail::task*> tasks;
+        };
+
         struct queue
         {
             void spawn_task(delegate work, _detail::job* parent);
             _detail::task* pull_task();
             void execute(_detail::task& item);
 
-            // FIXME: temporary "just works" data-structure to be
-            // replaced by "lock-free" structure
-            std::mutex task_lock;
-            std::deque<_detail::task*> tasks;
-
-            // FIXME: use a atomic linked list, though note that
-            // we may need to keep a mutex to pair with the
-            // condition_variable.
-            std::mutex park_lock;
-            parked_thread* parked = nullptr;
+            concurrent_queue tasks;
+            parking_lot parked;
         };
 
     }
