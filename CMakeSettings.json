@@ -1,0 +1,21 @@
+{
+  // See https://go.microsoft.com//fwlink//?linkid=834763 for more information about this file.
+  "configurations": [
+    {
+      "name": "Debug64",
+      "generator": "Visual Studio 15 2017 Win64",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\build\\win64",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "-m -v:minimal"
+    },
+    {
+      "name": "Release64",
+      "generator": "Visual Studio 15 2017 Win64",
+      "configurationType": "Release",
+      "buildRoot": "${projectDir}\\build\\win64",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "-m -v:minimal"
+    }
+  ]
+}

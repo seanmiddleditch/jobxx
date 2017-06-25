@@ -8,7 +8,7 @@ set(JOBXX_PUBLIC_HEADERS
     include/jobxx/job.h
     include/jobxx/queue.h
 )
-set(
+set(JOBXX_PRIVATE_HEADERS
     include/jobxx/_detail/task.h
 )
 set(JOBXX_SOURCES
