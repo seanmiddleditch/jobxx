@@ -70,21 +70,34 @@ namespace jobxx
         }
     }
 
-    job queue::_spawn_job(void(*work)(void*), void* data)
+    job queue::_spawn_job(work payload)
     {
         job j;
-        _spawn_task(work, data, &j);
+        _spawn_task(payload, &j);
         return j;
     }
 
-    void queue::_spawn_task(void(*work)(void*), void* data, job* parent)
+    void queue::_spawn_task(work payload, job* parent)
     {
         if (parent != nullptr)
         {
             parent->_add_task();
         }
-        task t(work, data, parent);
-        t._execute();
+        task item{payload, parent};
+        _execute(item);
+    }
+
+    void queue::_execute(task& item)
+    {
+        if (item.payload.action != nullptr)
+        {
+            item.payload.action(item.payload.data);
+        }
+
+        if (item.parent != nullptr)
+        {
+            item.parent->_complete_task();
+        }
     }
 
 }

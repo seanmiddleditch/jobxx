@@ -32,6 +32,8 @@
 #define _guard_JOBXX_QUEUE_H
 #pragma once
 
+#include "task.h"
+
 namespace jobxx
 {
 
@@ -58,8 +60,9 @@ namespace jobxx
     private:
         struct impl;
 
-        job _spawn_job(void(*)(void*), void*);
-        void _spawn_task(void(*)(void*), void*, job*);
+        job _spawn_job(work);
+        void _spawn_task(work, job*);
+        void _execute(task& item);
 
         impl* _impl = nullptr;
     };
@@ -67,20 +70,20 @@ namespace jobxx
     template <typename FunctionT>
     job queue::spawn_job(FunctionT&& func)
     {
-        return _spawn_job([](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func));
+        return _spawn_job({[](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func)});
     }
 
     template <typename FunctionT>
     job& queue::spawn_task(job& parent, FunctionT&& func)
     {
-        _spawn_task([](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func), &parent);
+        _spawn_task({[](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func)}, &parent);
         return parent;
     }
 
     template <typename FunctionT>
     void queue::spawn_task(FunctionT&& func)
     {
-        _spawn_task([](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func), nullptr);
+        _spawn_task({[](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func)}, nullptr);
     }
 
 }

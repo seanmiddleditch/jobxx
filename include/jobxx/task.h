@@ -34,28 +34,19 @@
 
 namespace jobxx
 {
-    using work = void(*)(void*);
 
     class job;
-    class queue;
 
-    class task
+    struct work
     {
-    public:
-        task(task const&) = delete;
-        task& operator=(task const&) = delete;
+        void(*action)(void*) = nullptr;
+        void* data = nullptr;
+    };
 
-    private:
-        task(work w, void* d, job* j) : _work(w), _data(d), _job(j) {}
-        ~task() = default;
-
-        void _execute();
-
-        work _work = nullptr;
-        void* _data = nullptr;
-        job* _job = nullptr;
-
-        friend queue;
+    struct task
+    {
+        work payload;
+        job* parent = nullptr;
     };
 
 }

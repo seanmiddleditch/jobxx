@@ -36,7 +36,6 @@
 
 namespace jobxx
 {
-    class task;
     class queue;
 
     class job
@@ -62,7 +61,6 @@ namespace jobxx
 
         impl* _impl = nullptr;
 
-        friend task;
         friend queue;
     };
     

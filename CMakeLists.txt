@@ -11,7 +11,6 @@ set(JOBXX_PUBLIC_HEADERS
 set(JOBXX_SOURCES
     source/job.cc
     source/queue.cc
-    source/task.cc
 )
 
 set(JOBXX_FILES ${JOBXX_PUBLIC_HEADERS} ${JOBXX_SOURCES})
