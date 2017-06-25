@@ -40,7 +40,7 @@
 namespace jobxx
 {
 
-    namespace _detail { struct task; }
+    namespace _detail { struct queue; }
 
     class queue
     {
@@ -52,7 +52,7 @@ namespace jobxx
         queue& operator=(queue const&) = delete;
 
         template <typename InitFunctionT> job create_job(InitFunctionT&& initializer);
-        void spawn_task(delegate&& work) { _spawn_task(std::move(work), nullptr); }
+        void spawn_task(delegate&& work);
 
         void wait_job_actively(job const& awaited);
 
@@ -63,10 +63,8 @@ namespace jobxx
         struct impl;
 
 		_detail::job* _create_job();
-        void _spawn_task(delegate work, _detail::job* parent);
-        void _execute(_detail::task& item);
 
-        impl* _impl = nullptr;
+        _detail::queue* _impl = nullptr;
 
 		friend context; // to call _spawn_task
     };
@@ -75,7 +73,7 @@ namespace jobxx
     job queue::create_job(InitFunctionT&& initializer)
     {
 		_detail::job* job_impl = _create_job();
-		context ctx(*this, job_impl);
+		context ctx(*_impl, job_impl);
 		initializer(ctx);
 		return job(*job_impl);
     }

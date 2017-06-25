@@ -28,36 +28,37 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_CONTEXT_H)
-#define _guard_JOBXX_CONTEXT_H
+#if !defined(_guard_JOBXX_DETAIL_QUEUE_H)
+#define _guard_JOBXX_DETAIL_QUEUE_H
 #pragma once
 
-#include "delegate.h"
+#include "jobxx/delegate.h"
+#include <mutex>
+#include <deque>
 
 namespace jobxx
 {
 
 	namespace _detail
 	{
+
 		struct job;
-		struct queue;
+		struct task;
+
+		struct queue
+		{
+			void spawn_task(delegate work, _detail::job* parent);
+			_detail::task* pull_task();
+			void execute(_detail::task& item);
+
+			// FIXME: temporary "just works" data-structure to be
+			// replaced by "lock-free" structure
+			std::mutex task_lock;
+			std::deque<_detail::task*> tasks;
+		};
+
 	}
-
-	class context
-	{
-	public:
-		explicit context(_detail::queue& queue, _detail::job* parent) : _queue(queue), _job(parent) {}
-
-		context(context const&) = delete;
-		context& operator=(context const&) = delete;
-
-		void spawn_task(delegate&& work);
-
-	private:
-		_detail::queue& _queue;
-		_detail::job* _job = nullptr;
-	};
 
 }
 
-#endif // defined(_guard_JOBXX_CONTEXT_H)
+#endif // defined(_guard_JOBXX_DETAIL_QUEUE_H)

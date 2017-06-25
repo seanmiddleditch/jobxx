@@ -31,18 +31,14 @@
 
 #include "jobxx/queue.h"
 #include "jobxx/job.h"
-#include "jobxx/_detail/task.h"
 #include "jobxx/_detail/job.h"
+#include "jobxx/_detail/queue.h"
+#include "jobxx/_detail/task.h"
 
 namespace jobxx
 {
 
-    struct queue::impl
-    {
-
-    };
-
-    queue::queue() : _impl(new impl) {}
+    queue::queue() : _impl(new _detail::queue) {}
     queue::~queue()
     {
         work_all();
@@ -60,7 +56,17 @@ namespace jobxx
 
     bool queue::work_one()
     {
-        return false;
+		_detail::task* item = _impl->pull_task();
+		if (item != nullptr)
+		{
+			_impl->execute(*item);
+			delete item;
+			return true;
+		}
+		else
+		{
+			return false;
+		}
     }
 
     void queue::work_all()
@@ -76,7 +82,12 @@ namespace jobxx
 		return new _detail::job;
 	}
 
-    void queue::_spawn_task(delegate work, _detail::job* parent)
+	void queue::spawn_task(delegate&& work)
+	{
+		_impl->spawn_task(std::move(work), nullptr);
+	}
+
+    void _detail::queue::spawn_task(delegate work, _detail::job* parent)
     {
         if (parent != nullptr)
         {
@@ -92,11 +103,28 @@ namespace jobxx
 			}
         }
 
-        _detail::task item{std::move(work), parent};
-        _execute(item); // FIXME: schedule for later execution
+        _detail::task* item = new _detail::task{std::move(work), parent};
+
+		std::unique_lock<std::mutex> task_lock;
+		tasks.push_back(item);
     }
 
-    void queue::_execute(_detail::task& item)
+	_detail::task* _detail::queue::pull_task()
+	{
+		std::unique_lock<std::mutex> task_lock;
+		if (!tasks.empty())
+		{
+			_detail::task* item = tasks.front();
+			tasks.pop_front();
+			return item;
+		}
+		else
+		{
+			return nullptr;
+		}
+	}
+
+    void _detail::queue::execute(_detail::task& item)
     {
         if (item.work)
         {

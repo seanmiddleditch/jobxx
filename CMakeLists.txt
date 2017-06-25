@@ -11,6 +11,7 @@ set(JOBXX_PUBLIC_HEADERS
 )
 set(JOBXX_PRIVATE_HEADERS
     include/jobxx/_detail/job.h
+    include/jobxx/_detail/queue.h
     include/jobxx/_detail/task.h
 )
 set(JOBXX_SOURCES

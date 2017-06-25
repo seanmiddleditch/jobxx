@@ -22,14 +22,14 @@
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
 #include "jobxx/context.h"
-#include "jobxx/queue.h"
+#include "jobxx/_detail/queue.h"
 
 namespace jobxx
 {
 
 	void context::spawn_task(delegate&& work)
 	{
-		_queue._spawn_task(std::move(work), _job);
+		_queue.spawn_task(std::move(work), _job);
 	}
 
 }
