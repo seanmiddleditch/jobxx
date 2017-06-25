@@ -24,12 +24,7 @@
 #include "jobxx/context.h"
 #include "jobxx/_detail/queue.h"
 
-namespace jobxx
+void jobxx::context::spawn_task(delegate&& work)
 {
-
-	void context::spawn_task(delegate&& work)
-	{
-		_queue.spawn_task(std::move(work), _job);
-	}
-
+	_queue.spawn_task(std::move(work), _job);
 }

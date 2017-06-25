@@ -32,41 +32,36 @@
 #include "jobxx/job.h"
 #include "jobxx/_detail/job.h"
 
-namespace jobxx
+jobxx::job::~job()
 {
-
-	job::~job()
+	if (_impl != nullptr && 0 == --_impl->refs)
 	{
+		delete _impl;
+	}
+}
+
+jobxx::job& jobxx::job::operator=(job&& rhs)
+{
+    if (this != &rhs)
+    {
 		if (_impl != nullptr && 0 == --_impl->refs)
 		{
 			delete _impl;
 		}
-	}
 
-    job& job::operator=(job&& rhs)
-    {
-        if (this != &rhs)
-        {
-			if (_impl != nullptr && 0 == --_impl->refs)
-			{
-				delete _impl;
-			}
+        _impl = rhs._impl;
+        rhs._impl = nullptr;
 
-            _impl = rhs._impl;
-            rhs._impl = nullptr;
-
-			if (_impl != nullptr)
-			{
-				++_impl->refs;
-			}
-        }
-
-        return *this;
+		if (_impl != nullptr)
+		{
+			++_impl->refs;
+		}
     }
 
-    bool job::complete() const
-    {
-        return _impl == nullptr || _impl->tasks == 0;
-    }
+    return *this;
+}
 
+bool jobxx::job::complete() const
+{
+    return _impl == nullptr || _impl->tasks == 0;
 }

@@ -34,6 +34,7 @@
 
 namespace jobxx
 {
+
 	namespace _detail { struct job; }
 
     class job

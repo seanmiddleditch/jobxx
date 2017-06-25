@@ -35,119 +35,115 @@
 #include "jobxx/_detail/queue.h"
 #include "jobxx/_detail/task.h"
 
-namespace jobxx
+jobxx::queue::queue() : _impl(new _detail::queue) {}
+
+jobxx::queue::~queue()
 {
+    work_all();
+    delete _impl;
+}
 
-    queue::queue() : _impl(new _detail::queue) {}
-    queue::~queue()
+void jobxx::queue::wait_job_actively(job const& awaited)
+{
+    while (!awaited.complete())
     {
-        work_all();
-        delete _impl;
+        work_one();
+        // FIXME: back-off/sleep if work_one has no work
     }
+}
 
-    void queue::wait_job_actively(job const& awaited)
-    {
-        while (!awaited.complete())
-        {
-            work_one();
-            // FIXME: back-off/sleep if work_one has no work
-        }
-    }
-
-    bool queue::work_one()
-    {
-		_detail::task* item = _impl->pull_task();
-		if (item != nullptr)
-		{
-			_impl->execute(*item);
-			delete item;
-			return true;
-		}
-		else
-		{
-			return false;
-		}
-    }
-
-    void queue::work_all()
-    {
-        while (work_one())
-        {
-            // keep looping
-        }
-    }
-
-	_detail::job* queue::_create_job()
+bool jobxx::queue::work_one()
+{
+	_detail::task* item = _impl->pull_task();
+	if (item != nullptr)
 	{
-		return new _detail::job;
+		_impl->execute(*item);
+		delete item;
+		return true;
 	}
-
-	void queue::spawn_task(delegate&& work)
+	else
 	{
-		_impl->spawn_task(std::move(work), nullptr);
+		return false;
 	}
+}
 
-    void _detail::queue::spawn_task(delegate work, _detail::job* parent)
+void jobxx::queue::work_all()
+{
+    while (work_one())
     {
-        if (parent != nullptr)
-        {
-			// increment the number of pending tasks
-			// and if this is the first task, add a
-			// reference so the job isn't deleted
-			// before the task completes. we only do
-			// this count on the first/last task to
-			// avoid excessive reference counting.
-			if (0 == parent->tasks++)
+        // keep looping
+    }
+}
+
+jobxx::_detail::job* jobxx::queue::_create_job()
+{
+	return new _detail::job;
+}
+
+void jobxx::queue::spawn_task(delegate&& work)
+{
+	_impl->spawn_task(std::move(work), nullptr);
+}
+
+void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
+{
+    if (parent != nullptr)
+    {
+		// increment the number of pending tasks
+		// and if this is the first task, add a
+		// reference so the job isn't deleted
+		// before the task completes. we only do
+		// this count on the first/last task to
+		// avoid excessive reference counting.
+		if (0 == parent->tasks++)
+		{
+			++parent->refs;
+		}
+    }
+
+    _detail::task* item = new _detail::task{std::move(work), parent};
+
+	std::unique_lock<std::mutex> task_lock;
+	tasks.push_back(item);
+}
+
+jobxx::_detail::task* jobxx::_detail::queue::pull_task()
+{
+	std::unique_lock<std::mutex> task_lock;
+	if (!tasks.empty())
+	{
+		_detail::task* item = tasks.front();
+		tasks.pop_front();
+		return item;
+	}
+	else
+	{
+		return nullptr;
+	}
+}
+
+void jobxx::_detail::queue::execute(_detail::task& item)
+{
+    if (item.work)
+    {
+		context ctx(*this, item.parent);
+        item.work(ctx);
+    }
+
+    if (item.parent != nullptr)
+    {
+		// decrement the number of outstanding
+		// tasks. if this is the last task that
+		// was pending, also remove the reference
+		// count we added when the first task was
+		// added, since there are no longer any
+		// tasks referencing the job.
+		if (item.parent != nullptr && 0 == --item.parent->tasks)
+		{
+			if (0 == --item.parent->refs)
 			{
-				++parent->refs;
+				delete item.parent;
 			}
-        }
-
-        _detail::task* item = new _detail::task{std::move(work), parent};
-
-		std::unique_lock<std::mutex> task_lock;
-		tasks.push_back(item);
-    }
-
-	_detail::task* _detail::queue::pull_task()
-	{
-		std::unique_lock<std::mutex> task_lock;
-		if (!tasks.empty())
-		{
-			_detail::task* item = tasks.front();
-			tasks.pop_front();
-			return item;
 		}
-		else
-		{
-			return nullptr;
-		}
-	}
-
-    void _detail::queue::execute(_detail::task& item)
-    {
-        if (item.work)
-        {
-			context ctx(*this, item.parent);
-            item.work(ctx);
-        }
-
-        if (item.parent != nullptr)
-        {
-			// decrement the number of outstanding
-			// tasks. if this is the last task that
-			// was pending, also remove the reference
-			// count we added when the first task was
-			// added, since there are no longer any
-			// tasks referencing the job.
-			if (item.parent != nullptr && 0 == --item.parent->tasks)
-			{
-				if (0 == --item.parent->refs)
-				{
-					delete item.parent;
-				}
-			}
-        }
     }
-
 }
