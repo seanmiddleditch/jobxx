@@ -35,6 +35,7 @@
 #include "jobxx/delegate.h"
 #include <mutex>
 #include <deque>
+#include <atomic>
 
 namespace jobxx
 {
@@ -44,6 +45,13 @@ namespace jobxx
 
 		struct job;
 		struct task;
+
+		struct parked_thread
+		{
+			std::condition_variable signal;
+			parked_thread* prev = nullptr;
+			parked_thread* next = nullptr;
+		};
 
 		struct queue
 		{
@@ -55,6 +63,9 @@ namespace jobxx
 			// replaced by "lock-free" structure
 			std::mutex task_lock;
 			std::deque<_detail::task*> tasks;
+
+			std::mutex park_lock;
+			parked_thread* parked = nullptr;
 		};
 
 	}

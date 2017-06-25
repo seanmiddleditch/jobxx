@@ -79,7 +79,10 @@ bool thread_test()
 	{
 		while (!done)
 		{
-			queue.work_all();
+			if (!queue.work_one())
+			{
+				queue.park([&done]{ return done.load(); });
+			}
 		}
 	});
 
@@ -99,6 +102,7 @@ bool thread_test()
 
 	done = true;
 
+	queue.unpark_all();
 	worker.join();
 
 	return true;

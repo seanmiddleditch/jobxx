@@ -75,6 +75,59 @@ void jobxx::queue::work_all()
     }
 }
 
+void jobxx::queue::park(predicate pred)
+{
+	_detail::parked_thread parked;
+
+	// add thread to list of parked threads
+	{
+		std::lock_guard<std::mutex> _(_impl->park_lock);
+
+		parked.next = _impl->parked;
+		_impl->parked = &parked;
+		if (parked.next != nullptr)
+		{
+			parked.next->prev = &parked;
+		}
+	}
+
+	// wait until a task is available
+	{
+		std::unique_lock<std::mutex> lock(_impl->task_lock);
+		parked.signal.wait(lock, [this, &parked, &pred]()
+		{
+			return !_impl->tasks.empty() || (pred && pred());
+		});
+	}
+
+	// remove thread from list of parked threads
+	{
+		std::lock_guard<std::mutex> _(_impl->park_lock);
+
+		if (parked.next != nullptr)
+		{
+			parked.next->prev = parked.prev;
+		}
+		if (parked.prev != nullptr)
+		{
+			parked.prev->next = parked.next;
+		}
+		if (&parked == _impl->parked)
+		{
+			_impl->parked = parked.next;
+		}
+	}
+}
+
+void jobxx::queue::unpark_all()
+{
+	std::lock_guard<std::mutex> _(_impl->park_lock);
+	for (_detail::parked_thread* parked = _impl->parked; parked != nullptr; parked = parked->next)
+	{
+		parked->signal.notify_one();
+	}
+}
+
 jobxx::_detail::job* jobxx::queue::_create_job()
 {
 	return new _detail::job;
@@ -103,8 +156,23 @@ void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
 
     _detail::task* item = new _detail::task{std::move(work), parent};
 
-	std::lock_guard<std::mutex> _(task_lock);
-	tasks.push_back(item);
+	{
+		std::lock_guard<std::mutex> _(task_lock);
+		tasks.push_back(item);
+	}
+
+	{
+		// FIXME: this can result in the same thread being asked to unpark itself
+		// twice while other threads remain parked. we need to unpark the thread
+		// here and then wake it, and rely on the thread re-parking itself if
+		// there's no work when it wakes up. will need to figure out how to do
+		// that with condition_variable sanely, if possible.
+		std::lock_guard<std::mutex> _(park_lock);
+		if (parked != nullptr)
+		{
+			parked->signal.notify_one();
+		}
+	}
 }
 
 jobxx::_detail::task* jobxx::_detail::queue::pull_task()

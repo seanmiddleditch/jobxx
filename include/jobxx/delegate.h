@@ -70,20 +70,41 @@ namespace jobxx
         void operator()(context& ctx) { _thunk(&_storage, ctx); }
 
     private:
-		template <typename FunctionT> void _assign(FunctionT&& func);
+		template <typename FunctionT> static auto _invoke(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>;
+		template <typename FunctionT> static auto _invoke(void* storage, context&) -> std::enable_if_t<!_detail::takes_context_v<FunctionT>>;
+
+		template <typename FunctionT> inline void _assign(FunctionT&& func);
 
         void(*_thunk)(void*, context& ctx) = nullptr;
 		std::aligned_storage_t<max_size, max_alignment> _storage;
     };
 
+	class predicate
+	{
+	public:
+		predicate() = default;
+
+		template <typename FunctionT> /*implicit*/ predicate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
+
+		explicit operator bool() const { return _thunk != nullptr; }
+
+		bool operator()() { return _thunk(_view); }
+
+	private:
+		template <typename FunctionT> inline void _assign(FunctionT&& func);
+
+		bool(*_thunk)(void*) = nullptr;
+		void* _view = nullptr;
+	};
+
 	template <typename FunctionT>
-	static auto thunk(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>
+	auto delegate::_invoke(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>
 	{
 		(*static_cast<FunctionT*>(storage))(ctx);
 	}
 
 	template <typename FunctionT>
-	static auto thunk(void* storage, context&) -> std::enable_if_t<!_detail::takes_context_v<FunctionT>>
+	auto delegate::_invoke(void* storage, context&) -> std::enable_if_t<!_detail::takes_context_v<FunctionT>>
 	{
 		(*static_cast<FunctionT*>(storage))();
 	}
@@ -96,8 +117,15 @@ namespace jobxx
 		static_assert(std::is_trivially_move_constructible_v<FunctionT>, "function not a trivially move-constructible as required by jobxx::delegate");
 		static_assert(std::is_trivially_destructible_v<FunctionT>, "function not a trivially destructible as required by jobxx::delegate");
 
-		_thunk = &thunk<FunctionT>;
+		_thunk = &_invoke<FunctionT>;
 		new (&_storage) FunctionT(std::forward<FunctionT>(func));
+	}
+
+	template <typename FunctionT>
+	void predicate::_assign(FunctionT&& func)
+	{
+		_thunk = [](void* view){ return (*static_cast<FunctionT*>(view))(); };
+		_view = &func;
 	}
 
 }

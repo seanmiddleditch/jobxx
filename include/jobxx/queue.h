@@ -59,6 +59,9 @@ namespace jobxx
         bool work_one();
         void work_all();
 
+		void park(predicate pred = {});
+		void unpark_all();
+
     private:
         struct impl;
 
