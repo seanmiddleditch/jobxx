@@ -109,7 +109,7 @@ been fully executed.
 Returns `true` if there are no outstanding tasks associated with the
 job.
 
-##### job::operator bool() const`
+##### `job::operator bool() const`
 
 Same as `job::complete`.
 
@@ -146,7 +146,7 @@ Constructs a delegate wrapping `function`.
 
 Constructs a delegate wrapping `function`.
 
-##### `delegate::operator bool() const
+##### `delegate::operator bool() const`
 
 Returns `true` if the delegate has been created with a function, or `false`
 for a default-constructed (empty) delegate.
