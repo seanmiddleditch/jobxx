@@ -33,6 +33,7 @@
 #pragma once
 
 #include <utility>
+#include <type_traits>
 
 namespace jobxx
 {
@@ -43,23 +44,40 @@ namespace jobxx
         static constexpr int max_size = sizeof(void*) * 3;
         static constexpr int max_alignment = alignof(double);
 
-        template <typename FunctionT>
-        /*implicit*/ delegate(FunctionT&& func)
-        {
-            _thunk = [](void* f){ (*static_cast<FunctionT*>(f))(); };
-            _function = &func;
-            // FIXME: won't work with types that overload operator&,
-            // but I don't want to pull in <memory> if I can avoid it
-        }
+		delegate() = default;
+
+		inline delegate(delegate&& rhs);
+		delegate& operator=(delegate&& rhs) = delete;
+
+        template <typename FunctionT> /*implicit*/ delegate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
 
         explicit operator bool() const { return _thunk != nullptr; }
 
-        void operator()() { _thunk(_function); }
+        void operator()() { _thunk(&_storage); }
 
     private:
+		template <typename FunctionT> void _assign(FunctionT&& func);
+
         void(*_thunk)(void*) = nullptr;
-        void* _function = nullptr;
+		std::aligned_storage_t<max_size, max_alignment> _storage;
     };
+	
+	delegate::delegate(delegate&& rhs) : _thunk(rhs._thunk)
+	{
+		_storage = rhs._storage; // bitwise copy
+	}
+
+	template <typename FunctionT>
+	void delegate::_assign(FunctionT&& func)
+	{
+		static_assert(sizeof(FunctionT) <= max_size, "function too large for jobxx::delegate");
+		static_assert(alignof(FunctionT) <= max_alignment, "function over-aligned for jobxx::delegate");
+		static_assert(std::is_trivially_move_constructible_v<FunctionT>, "function not a trivially move-constructible as required by jobxx::delegate");
+		static_assert(std::is_trivially_destructible_v<FunctionT>, "function not a trivially destructible as required by jobxx::delegate");
+
+		_thunk = [](void* f){ (*static_cast<FunctionT*>(f))(); };
+		new (&_storage) FunctionT(std::forward<FunctionT>(func));
+	}
 
 }
 
