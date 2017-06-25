@@ -34,7 +34,6 @@
 
 namespace jobxx
 {
-    class queue;
 	namespace _detail { struct job; }
 
     class job
@@ -43,6 +42,9 @@ namespace jobxx
         job() = default;
         ~job();
 
+		// note this does not increment refs!
+		explicit job(_detail::job& impl) : _impl(&impl) {}
+
         job(job&& rhs) : _impl(rhs._impl) { rhs._impl = nullptr; }
         job& operator=(job&& rhs);
 
@@ -50,11 +52,7 @@ namespace jobxx
         explicit operator bool() const { return complete(); }
 
     private:
-		_detail::job* _get_impl();
-
         _detail::job* _impl = nullptr;
-
-        friend queue; // to call _get_impl
     };
     
 }

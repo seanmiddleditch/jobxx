@@ -32,15 +32,42 @@
 #include "jobxx/queue.h"
 #include "jobxx/job.h"
 
+bool basic_test()
+{
+	// execute the test 10 times in naive hopes of catching races
+	// FIXME: do this smarter
+	for (int i = 0; i < 10; ++i)
+	{
+		jobxx::queue queue;
+
+		int num = 0x1337c0de;
+		int num2 = 0x600df00d;
+
+		jobxx::job job = queue.create_job([&num, &num2](jobxx::context& ctx)
+		{
+			// spawn a task in the job (with no task context)
+			ctx.spawn_task([&num](){ num = 0xdeadbeef; });
+
+			// spawn a task in the job (with task context)
+			ctx.spawn_task([&num2](jobxx::context& ctx)
+			{
+				num2 = 0xdeadbeee;
+
+				ctx.spawn_task([&num2](){ ++num2; });
+			});
+		});
+		queue.wait_job_actively(job);
+
+		if (num != 0xdeadbeef || num2 != 0xdeadbeef)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 int main()
 {
-    jobxx::queue queue;
-
-    int num = 0x1337c0de;
-    auto job = queue.create_job([&](jobxx::context& ctx)
-	{
-		ctx.spawn_task([&](){ num = 0xdeadbeef; });
-	});
-	queue.wait_job_actively(job);
-    return num == 0xdeadbeef ? 0 : 1; // 0 is success for main retcode
+	return !basic_test();
 }

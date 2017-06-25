@@ -36,16 +36,16 @@
 
 namespace jobxx
 {
-    
-    class job;
 
     namespace _detail
     {
+    
+		struct job;
 
         struct task
         {
             delegate work;
-            job* parent = nullptr;
+            _detail::job* parent = nullptr;
         };
 
     }    

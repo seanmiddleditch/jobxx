@@ -69,16 +69,4 @@ namespace jobxx
         return _impl == nullptr || _impl->tasks == 0;
     }
 
-	_detail::job* job::_get_impl()
-	{
-		// FIXME: this is racy if two threads try to spawn
-		// tasks in an empty job at the same time.
-		if (_impl == nullptr)
-		{
-			_impl = new _detail::job;
-		}
-
-		return _impl;
-	}
-
 }

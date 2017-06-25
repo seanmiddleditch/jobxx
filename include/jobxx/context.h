@@ -43,18 +43,16 @@ namespace jobxx
 	class context
 	{
 	public:
-		explicit context(_detail::job& job, jobxx::queue& queue) : _job(job), _queue(queue) {}
+		explicit context(queue& queue, _detail::job* parent) : _queue(queue), _job(parent) {}
 
 		context(context const&) = delete;
 		context& operator=(context const&) = delete;
 
 		void spawn_task(delegate&& work);
 
-		queue& queue() { return _queue; }
-
 	private:
-		_detail::job& _job;
-		jobxx::queue& _queue;
+		queue& _queue;
+		_detail::job* _job = nullptr;
 	};
 
 }

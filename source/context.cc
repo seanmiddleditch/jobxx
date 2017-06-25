@@ -29,7 +29,7 @@ namespace jobxx
 
 	void context::spawn_task(delegate&& work)
 	{
-		_queue._spawn_task(std::move(work), &_job);
+		_queue._spawn_task(std::move(work), _job);
 	}
 
 }

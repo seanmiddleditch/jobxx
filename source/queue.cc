@@ -71,6 +71,11 @@ namespace jobxx
         }
     }
 
+	_detail::job* queue::_create_job()
+	{
+		return new _detail::job;
+	}
+
     void queue::_spawn_task(delegate work, _detail::job* parent)
     {
         if (parent != nullptr)
@@ -95,7 +100,8 @@ namespace jobxx
     {
         if (item.work)
         {
-            item.work();
+			context ctx(*this, item.parent);
+            item.work(ctx);
         }
 
         if (item.parent != nullptr)

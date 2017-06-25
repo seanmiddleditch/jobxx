@@ -38,6 +38,20 @@
 namespace jobxx
 {
 
+	class context;
+
+	namespace _detail
+	{
+		template <typename FunctionT, typename = std::void_t<>>
+		struct takes_context : std::false_type {};
+
+		template <typename FunctionT>
+		struct takes_context<FunctionT, std::void_t<decltype(std::declval<FunctionT>()(std::declval<context>()))>> : std::true_type {};
+
+		template <typename FunctionT>
+		constexpr bool takes_context_v = takes_context<FunctionT>();
+	}
+
     class delegate
     {
     public:
@@ -53,14 +67,26 @@ namespace jobxx
 
         explicit operator bool() const { return _thunk != nullptr; }
 
-        void operator()() { _thunk(&_storage); }
+        void operator()(context& ctx) { _thunk(&_storage, ctx); }
 
     private:
 		template <typename FunctionT> void _assign(FunctionT&& func);
 
-        void(*_thunk)(void*) = nullptr;
+        void(*_thunk)(void*, context& ctx) = nullptr;
 		std::aligned_storage_t<max_size, max_alignment> _storage;
     };
+
+	template <typename FunctionT>
+	static auto thunk(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>
+	{
+		(*static_cast<FunctionT*>(storage))(ctx);
+	}
+
+	template <typename FunctionT>
+	static auto thunk(void* storage, context&) -> std::enable_if_t<!_detail::takes_context_v<FunctionT>>
+	{
+		(*static_cast<FunctionT*>(storage))();
+	}
 
 	template <typename FunctionT>
 	void delegate::_assign(FunctionT&& func)
@@ -70,7 +96,7 @@ namespace jobxx
 		static_assert(std::is_trivially_move_constructible_v<FunctionT>, "function not a trivially move-constructible as required by jobxx::delegate");
 		static_assert(std::is_trivially_destructible_v<FunctionT>, "function not a trivially destructible as required by jobxx::delegate");
 
-		_thunk = [](void* f){ (*static_cast<FunctionT*>(f))(); };
+		_thunk = &thunk<FunctionT>;
 		new (&_storage) FunctionT(std::forward<FunctionT>(func));
 	}
 

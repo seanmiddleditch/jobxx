@@ -52,7 +52,7 @@ namespace jobxx
         queue& operator=(queue const&) = delete;
 
         template <typename InitFunctionT> job create_job(InitFunctionT&& initializer);
-        template <typename FunctionT> void spawn_task(FunctionT&& work);
+        void spawn_task(delegate&& work) { _spawn_task(std::move(work), nullptr); }
 
         void wait_job_actively(job const& awaited);
 
@@ -62,6 +62,7 @@ namespace jobxx
     private:
         struct impl;
 
+		_detail::job* _create_job();
         void _spawn_task(delegate work, _detail::job* parent);
         void _execute(_detail::task& item);
 
@@ -71,18 +72,12 @@ namespace jobxx
     };
 
     template <typename InitFunctionT>
-    job queue::create_job(InitFunctionT&& work)
+    job queue::create_job(InitFunctionT&& initializer)
     {
-		job group;
-		context ctx(*group._get_impl(), *this);
-		work(ctx);
-		return group;
-    }
-	
-    template <typename FunctionT>
-    void queue::spawn_task(FunctionT&& work)
-    {
-        _spawn_task(std::forward<FunctionT>(work), nullptr);
+		_detail::job* job_impl = _create_job();
+		context ctx(*this, job_impl);
+		initializer(ctx);
+		return job(*job_impl);
     }
 
 }
