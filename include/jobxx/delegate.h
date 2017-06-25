@@ -79,24 +79,6 @@ namespace jobxx
         std::aligned_storage_t<max_size, max_alignment> _storage;
     };
 
-    class predicate
-    {
-    public:
-        predicate() = default;
-
-        template <typename FunctionT> /*implicit*/ predicate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
-
-        explicit operator bool() const { return _thunk != nullptr; }
-
-        bool operator()() { return _thunk(_view); }
-
-    private:
-        template <typename FunctionT> inline void _assign(FunctionT&& func);
-
-        bool(*_thunk)(void*) = nullptr;
-        void* _view = nullptr;
-    };
-
     template <typename FunctionT>
     auto delegate::_invoke(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>
     {
@@ -119,13 +101,6 @@ namespace jobxx
 
         _thunk = &_invoke<FunctionT>;
         new (&_storage) FunctionT(std::forward<FunctionT>(func));
-    }
-
-    template <typename FunctionT>
-    void predicate::_assign(FunctionT&& func)
-    {
-        _thunk = [](void* view){ return (*static_cast<FunctionT*>(view))(); };
-        _view = &func;
     }
 
 }

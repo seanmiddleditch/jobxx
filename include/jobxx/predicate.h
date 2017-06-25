@@ -28,56 +28,40 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_QUEUE_H)
-#define _guard_JOBXX_QUEUE_H
+#if !defined(_guard_JOBXX_PREDICATE_H)
+#define _guard_JOBXX_PREDICATE_H
 #pragma once
 
-#include "delegate.h"
-#include "predicate.h"
-#include "job.h"
-#include "context.h"
 #include <utility>
 
 namespace jobxx
 {
 
-    namespace _detail { struct queue; }
-
-    class queue
+    class predicate
     {
     public:
-        queue();
-        ~queue();
+        predicate() = default;
 
-        queue(queue const&) = delete;
-        queue& operator=(queue const&) = delete;
+        template <typename FunctionT> /*implicit*/ predicate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
 
-        template <typename InitFunctionT> job create_job(InitFunctionT&& initializer);
-        void spawn_task(delegate&& work);
+        explicit operator bool() const { return _thunk != nullptr; }
 
-        void wait_job_actively(job const& awaited);
-
-        bool work_one();
-        void work_all();
-
-        void park(predicate pred = {});
-        void unpark_all();
+        bool operator()() { return _thunk(_view); }
 
     private:
-        _detail::job* _create_job();
+        template <typename FunctionT> inline void _assign(FunctionT&& func);
 
-        _detail::queue* _impl = nullptr;
+        bool(*_thunk)(void*) = nullptr;
+        void* _view = nullptr;
     };
 
-    template <typename InitFunctionT>
-    job queue::create_job(InitFunctionT&& initializer)
+    template <typename FunctionT>
+    void predicate::_assign(FunctionT&& func)
     {
-        _detail::job* job_impl = _create_job();
-        context ctx(*_impl, job_impl);
-        initializer(ctx);
-        return job(*job_impl);
+        _thunk = [](void* view){ return (*static_cast<FunctionT*>(view))(); };
+        _view = &func;
     }
 
 }
 
-#endif // defined(_guard_JOBXX_QUEUE_H)
+#endif // defined(_guard_JOBXX_PREDICATE_H)
