@@ -4,15 +4,17 @@ project(jobxx)
 enable_testing()
 
 set(JOBXX_PUBLIC_HEADERS
+    include/jobxx/context.h
     include/jobxx/delegate.h
     include/jobxx/job.h
     include/jobxx/queue.h
 )
 set(JOBXX_PRIVATE_HEADERS
-	include/jobxx/_detail/job.h
+    include/jobxx/_detail/job.h
     include/jobxx/_detail/task.h
 )
 set(JOBXX_SOURCES
+    source/context.cc
     source/job.cc
     source/queue.cc
 )

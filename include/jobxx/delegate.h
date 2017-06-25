@@ -46,7 +46,7 @@ namespace jobxx
 
 		delegate() = default;
 
-		inline delegate(delegate&& rhs);
+		delegate(delegate&& rhs) = default;
 		delegate& operator=(delegate&& rhs) = delete;
 
         template <typename FunctionT> /*implicit*/ delegate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
@@ -61,11 +61,6 @@ namespace jobxx
         void(*_thunk)(void*) = nullptr;
 		std::aligned_storage_t<max_size, max_alignment> _storage;
     };
-	
-	delegate::delegate(delegate&& rhs) : _thunk(rhs._thunk)
-	{
-		_storage = rhs._storage; // bitwise copy
-	}
 
 	template <typename FunctionT>
 	void delegate::_assign(FunctionT&& func)

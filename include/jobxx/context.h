@@ -28,63 +28,35 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_QUEUE_H)
-#define _guard_JOBXX_QUEUE_H
+#if !defined(_guard_JOBXX_CONTEXT_H)
+#define _guard_JOBXX_CONTEXT_H
 #pragma once
 
 #include "delegate.h"
-#include "job.h"
-#include "context.h"
-#include <utility>
 
 namespace jobxx
 {
 
-    namespace _detail { struct task; }
+	class queue;
+	namespace _detail { struct job; }
 
-    class queue
-    {
-    public:
-        queue();
-        ~queue();
+	class context
+	{
+	public:
+		explicit context(_detail::job& job, jobxx::queue& queue) : _job(job), _queue(queue) {}
 
-        queue(queue const&) = delete;
-        queue& operator=(queue const&) = delete;
+		context(context const&) = delete;
+		context& operator=(context const&) = delete;
 
-        template <typename InitFunctionT> job create_job(InitFunctionT&& initializer);
-        template <typename FunctionT> void spawn_task(FunctionT&& work);
+		void spawn_task(delegate&& work);
 
-        void wait_job_actively(job const& awaited);
+		queue& queue() { return _queue; }
 
-        bool work_one();
-        void work_all();
-
-    private:
-        struct impl;
-
-        void _spawn_task(delegate work, _detail::job* parent);
-        void _execute(_detail::task& item);
-
-        impl* _impl = nullptr;
-
-		friend context; // to call _spawn_task
-    };
-
-    template <typename InitFunctionT>
-    job queue::create_job(InitFunctionT&& work)
-    {
-		job group;
-		context ctx(*group._get_impl(), *this);
-		work(ctx);
-		return group;
-    }
-	
-    template <typename FunctionT>
-    void queue::spawn_task(FunctionT&& work)
-    {
-        _spawn_task(std::forward<FunctionT>(work), nullptr);
-    }
+	private:
+		_detail::job& _job;
+		jobxx::queue& _queue;
+	};
 
 }
 
-#endif // defined(_guard_JOBXX_QUEUE_H)
+#endif // defined(_guard_JOBXX_CONTEXT_H)

@@ -1,11 +1,3 @@
-
-// jobxx - C++ lightweight task library.
-//
-// This is free and unencumbered software released into the public domain.
-// 
-// Anyone is free to copy, modify, publish, use, compile, sell, or
-// distribute this software, either in source code form or as a compiled
-// binary, for any purpose, commercial or non - commercial, and by any
 // means.
 // 
 // In jurisdictions that recognize copyright laws, the author or authors
@@ -29,18 +21,15 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
+#include "jobxx/context.h"
 #include "jobxx/queue.h"
-#include "jobxx/job.h"
 
-int main()
+namespace jobxx
 {
-    jobxx::queue queue;
 
-    int num = 0x1337c0de;
-    auto job = queue.create_job([&](jobxx::context& ctx)
+	void context::spawn_task(delegate&& work)
 	{
-		ctx.spawn_task([&](){ num = 0xdeadbeef; });
-	});
-	queue.wait_job_actively(job);
-    return num == 0xdeadbeef ? 0 : 1; // 0 is success for main retcode
+		_queue._spawn_task(std::move(work), &_job);
+	}
+
 }

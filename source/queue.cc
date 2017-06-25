@@ -71,13 +71,6 @@ namespace jobxx
         }
     }
 
-    job queue::_spawn_job(delegate work)
-    {
-        job j;
-        _spawn_task(std::move(work), j._get_impl());
-        return j;
-    }
-
     void queue::_spawn_task(delegate work, _detail::job* parent)
     {
         if (parent != nullptr)
