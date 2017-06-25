@@ -4,6 +4,7 @@ project(jobxx)
 enable_testing()
 
 set(JOBXX_PUBLIC_HEADERS
+    include/jobxx/delegate.h
     include/jobxx/job.h
     include/jobxx/queue.h
     include/jobxx/task.h

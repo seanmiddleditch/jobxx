@@ -28,23 +28,34 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_TASK_H)
-#define _guard_JOBXX_TASK_H
+#if !defined(_guard_JOBXX_DELEGATE_H)
+#define _guard_JOBXX_DELEGATE_H
 #pragma once
-
-#include "delegate.h"
 
 namespace jobxx
 {
 
-    class job;
-
-    struct task
+    class delegate
     {
-        delegate work;
-        job* parent = nullptr;
+    public:
+        template <typename FunctionT>
+        /*implicit*/ delegate(FunctionT&& func)
+        {
+            _thunk = [](void* f){ (*static_cast<FunctionT*>(f))(); }
+            _function = &func;
+            // FIXME: won't work with types that overload operator&,
+            // but I don't want to pull in <memory> if I can avoid it
+        }
+
+        explicit operator bool() const { return _thunk != nullptr; }
+
+        void operator()() { _thunk(_function); }
+
+    private:
+        void(*_thunk)(void*) = nullptr;
+        void* _function = nullptr;
     };
 
 }
 
-#endif // defined(_guard_JOBXX_TASK_H)
+#endif // defined(_guard_JOBXX_DELEGATE_H)

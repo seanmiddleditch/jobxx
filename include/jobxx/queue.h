@@ -32,12 +32,13 @@
 #define _guard_JOBXX_QUEUE_H
 #pragma once
 
-#include "task.h"
+#include "delegate.h"
 
 namespace jobxx
 {
 
     class job;
+    struct task;
 
     class queue
     {
@@ -48,9 +49,9 @@ namespace jobxx
         queue(queue const&) = delete;
         queue& operator=(queue const&) = delete;
 
-        template <typename FunctionT> job spawn_job(FunctionT&& func);
-        template <typename FunctionT> job& spawn_task(job& parent, FunctionT&& func);
-        template <typename FunctionT> void spawn_task(FunctionT&& func);
+        template <typename FunctionT> job spawn_job(FunctionT&& work);
+        template <typename FunctionT> job& spawn_task(job& parent, FunctionT&& work);
+        template <typename FunctionT> void spawn_task(FunctionT&& work);
 
         void wait_job_actively(job const& awaited);
 
@@ -60,30 +61,30 @@ namespace jobxx
     private:
         struct impl;
 
-        job _spawn_job(work);
-        void _spawn_task(work, job*);
+        job _spawn_job(delegate work);
+        void _spawn_task(delegate work, job* parent);
         void _execute(task& item);
 
         impl* _impl = nullptr;
     };
 
     template <typename FunctionT>
-    job queue::spawn_job(FunctionT&& func)
+    job queue::spawn_job(FunctionT&& work)
     {
-        return _spawn_job({[](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func)});
+        return _spawn_job(std::forward(work));
     }
 
     template <typename FunctionT>
-    job& queue::spawn_task(job& parent, FunctionT&& func)
+    job& queue::spawn_task(job& parent, FunctionT&& work)
     {
-        _spawn_task({[](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func)}, &parent);
+        _spawn_task(std::forward(work), &parent);
         return parent;
     }
 
     template <typename FunctionT>
-    void queue::spawn_task(FunctionT&& func)
+    void queue::spawn_task(FunctionT&& work)
     {
-        _spawn_task({[](void* d){ (*static_cast<FunctionT*>(d))(); }, std::addressof(func)}, nullptr);
+        _spawn_task(std::forward(work), nullptr);
     }
 
 }

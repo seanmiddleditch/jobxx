@@ -70,28 +70,28 @@ namespace jobxx
         }
     }
 
-    job queue::_spawn_job(work payload)
+    job queue::_spawn_job(delegate work)
     {
         job j;
-        _spawn_task(payload, &j);
+        _spawn_task(std::move(work), &j);
         return j;
     }
 
-    void queue::_spawn_task(work payload, job* parent)
+    void queue::_spawn_task(delegate work, job* parent)
     {
         if (parent != nullptr)
         {
             parent->_add_task();
         }
-        task item{payload, parent};
+        task item{std::move(work), parent};
         _execute(item);
     }
 
     void queue::_execute(task& item)
     {
-        if (item.payload.action != nullptr)
+        if (item.work)
         {
-            item.payload.action(item.payload.data);
+            item.work();
         }
 
         if (item.parent != nullptr)
