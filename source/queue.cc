@@ -91,7 +91,7 @@ void jobxx::queue::park(predicate pred)
 		}
 	}
 
-	// wait until a task is available
+	// wait until a task is available or the predicate fires
 	{
 		std::unique_lock<std::mutex> lock(_impl->task_lock);
 		parked.signal.wait(lock, [this, &parked, &pred]()
