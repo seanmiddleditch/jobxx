@@ -63,13 +63,9 @@ namespace jobxx
         void unpark_all();
 
     private:
-        struct impl;
-
         _detail::job* _create_job();
 
         _detail::queue* _impl = nullptr;
-
-        friend context; // to call _spawn_task
     };
 
     template <typename InitFunctionT>
