@@ -36,16 +36,16 @@
 
 namespace jobxx
 {
-	namespace _detail
-	{
+    namespace _detail
+    {
 
-		struct job
-		{
-			std::atomic<int> refs = 1;
-			std::atomic<int> tasks = 0;
-		};
+        struct job
+        {
+            std::atomic<int> refs = 1;
+            std::atomic<int> tasks = 0;
+        };
 
-	}    
+    }    
 }
 
 #endif // defined(_guard_JOBXX_DETAIL_JOB_H)

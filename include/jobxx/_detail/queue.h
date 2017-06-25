@@ -40,35 +40,35 @@
 namespace jobxx
 {
 
-	namespace _detail
-	{
+    namespace _detail
+    {
 
-		struct job;
-		struct task;
+        struct job;
+        struct task;
 
-		struct parked_thread
-		{
-			std::condition_variable signal;
-			parked_thread* prev = nullptr;
-			parked_thread* next = nullptr;
-		};
+        struct parked_thread
+        {
+            std::condition_variable signal;
+            parked_thread* prev = nullptr;
+            parked_thread* next = nullptr;
+        };
 
-		struct queue
-		{
-			void spawn_task(delegate work, _detail::job* parent);
-			_detail::task* pull_task();
-			void execute(_detail::task& item);
+        struct queue
+        {
+            void spawn_task(delegate work, _detail::job* parent);
+            _detail::task* pull_task();
+            void execute(_detail::task& item);
 
-			// FIXME: temporary "just works" data-structure to be
-			// replaced by "lock-free" structure
-			std::mutex task_lock;
-			std::deque<_detail::task*> tasks;
+            // FIXME: temporary "just works" data-structure to be
+            // replaced by "lock-free" structure
+            std::mutex task_lock;
+            std::deque<_detail::task*> tasks;
 
-			std::mutex park_lock;
-			parked_thread* parked = nullptr;
-		};
+            std::mutex park_lock;
+            parked_thread* parked = nullptr;
+        };
 
-	}
+    }
 
 }
 

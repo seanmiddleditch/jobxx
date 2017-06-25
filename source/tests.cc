@@ -37,78 +37,78 @@
 
 bool basic_test()
 {
-	// execute the test 10 times in naive hopes of catching races
-	// FIXME: do this smarter
-	for (int i = 0; i < 10; ++i)
-	{
-		jobxx::queue queue;
+    // execute the test 10 times in naive hopes of catching races
+    // FIXME: do this smarter
+    for (int i = 0; i < 10; ++i)
+    {
+        jobxx::queue queue;
 
-		int num = 0x1337c0de;
-		int num2 = 0x600df00d;
+        int num = 0x1337c0de;
+        int num2 = 0x600df00d;
 
-		jobxx::job job = queue.create_job([&num, &num2](jobxx::context& ctx)
-		{
-			// spawn a task in the job (with no task context)
-			ctx.spawn_task([&num](){ num = 0xdeadbeef; });
+        jobxx::job job = queue.create_job([&num, &num2](jobxx::context& ctx)
+        {
+            // spawn a task in the job (with no task context)
+            ctx.spawn_task([&num](){ num = 0xdeadbeef; });
 
-			// spawn a task in the job (with task context)
-			ctx.spawn_task([&num2](jobxx::context& ctx)
-			{
-				num2 = 0xdeadbeee;
+            // spawn a task in the job (with task context)
+            ctx.spawn_task([&num2](jobxx::context& ctx)
+            {
+                num2 = 0xdeadbeee;
 
-				ctx.spawn_task([&num2](){ ++num2; });
-			});
-		});
-		queue.wait_job_actively(job);
+                ctx.spawn_task([&num2](){ ++num2; });
+            });
+        });
+        queue.wait_job_actively(job);
 
-		if (num != 0xdeadbeef || num2 != 0xdeadbeef)
-		{
-			return false;
-		}
-	}
+        if (num != 0xdeadbeef || num2 != 0xdeadbeef)
+        {
+            return false;
+        }
+    }
 
-	return true;
+    return true;
 }
 
 bool thread_test()
 {
-	jobxx::queue queue;
-	std::atomic<bool> done = false;
+    jobxx::queue queue;
+    std::atomic<bool> done = false;
 
-	std::thread worker([&queue, &done]()
-	{
-		while (!done)
-		{
-			if (!queue.work_one())
-			{
-				queue.park([&done]{ return done.load(); });
-			}
-		}
-	});
+    std::thread worker([&queue, &done]()
+    {
+        while (!done)
+        {
+            if (!queue.work_one())
+            {
+                queue.park([&done]{ return done.load(); });
+            }
+        }
+    });
 
-	std::atomic<int> counter = 0;
-	for (int inc = 1; inc != 5; ++inc)
-	{
-		for (int ji = 0; ji != 1000; ++ji)
-		{
-			queue.spawn_task([&counter, inc](){ counter += inc; });
-		}
-	}
+    std::atomic<int> counter = 0;
+    for (int inc = 1; inc != 5; ++inc)
+    {
+        for (int ji = 0; ji != 1000; ++ji)
+        {
+            queue.spawn_task([&counter, inc](){ counter += inc; });
+        }
+    }
 
-	while (counter != (1000 + 2000 + 3000 + 4000))
-	{
-		queue.work_all();
-	}
+    while (counter != (1000 + 2000 + 3000 + 4000))
+    {
+        queue.work_all();
+    }
 
-	done = true;
+    done = true;
 
-	queue.unpark_all();
-	worker.join();
+    queue.unpark_all();
+    worker.join();
 
-	return true;
+    return true;
 }
 
 int main()
 {
-	return !(basic_test() && thread_test());
+    return !(basic_test() && thread_test());
 }

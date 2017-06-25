@@ -35,7 +35,7 @@
 namespace jobxx
 {
 
-	namespace _detail { struct job; }
+    namespace _detail { struct job; }
 
     class job
     {
@@ -43,8 +43,8 @@ namespace jobxx
         job() = default;
         ~job();
 
-		// note this does not increment refs!
-		explicit job(_detail::job& impl) : _impl(&impl) {}
+        // note this does not increment refs!
+        explicit job(_detail::job& impl) : _impl(&impl) {}
 
         job(job&& rhs) : _impl(rhs._impl) { rhs._impl = nullptr; }
         job& operator=(job&& rhs);

@@ -37,26 +37,26 @@
 namespace jobxx
 {
 
-	namespace _detail
-	{
-		struct job;
-		struct queue;
-	}
+    namespace _detail
+    {
+        struct job;
+        struct queue;
+    }
 
-	class context
-	{
-	public:
-		explicit context(_detail::queue& queue, _detail::job* parent) : _queue(queue), _job(parent) {}
+    class context
+    {
+    public:
+        explicit context(_detail::queue& queue, _detail::job* parent) : _queue(queue), _job(parent) {}
 
-		context(context const&) = delete;
-		context& operator=(context const&) = delete;
+        context(context const&) = delete;
+        context& operator=(context const&) = delete;
 
-		void spawn_task(delegate&& work);
+        void spawn_task(delegate&& work);
 
-	private:
-		_detail::queue& _queue;
-		_detail::job* _job = nullptr;
-	};
+    private:
+        _detail::queue& _queue;
+        _detail::job* _job = nullptr;
+    };
 
 }
 

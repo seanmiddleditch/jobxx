@@ -26,5 +26,5 @@
 
 void jobxx::context::spawn_task(delegate&& work)
 {
-	_queue.spawn_task(std::move(work), _job);
+    _queue.spawn_task(std::move(work), _job);
 }

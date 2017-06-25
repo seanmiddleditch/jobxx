@@ -59,26 +59,26 @@ namespace jobxx
         bool work_one();
         void work_all();
 
-		void park(predicate pred = {});
-		void unpark_all();
+        void park(predicate pred = {});
+        void unpark_all();
 
     private:
         struct impl;
 
-		_detail::job* _create_job();
+        _detail::job* _create_job();
 
         _detail::queue* _impl = nullptr;
 
-		friend context; // to call _spawn_task
+        friend context; // to call _spawn_task
     };
 
     template <typename InitFunctionT>
     job queue::create_job(InitFunctionT&& initializer)
     {
-		_detail::job* job_impl = _create_job();
-		context ctx(*_impl, job_impl);
-		initializer(ctx);
-		return job(*job_impl);
+        _detail::job* job_impl = _create_job();
+        context ctx(*_impl, job_impl);
+        initializer(ctx);
+        return job(*job_impl);
     }
 
 }

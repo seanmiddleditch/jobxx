@@ -38,19 +38,19 @@
 namespace jobxx
 {
 
-	class context;
+    class context;
 
-	namespace _detail
-	{
-		template <typename FunctionT, typename = std::void_t<>>
-		struct takes_context : std::false_type {};
+    namespace _detail
+    {
+        template <typename FunctionT, typename = std::void_t<>>
+        struct takes_context : std::false_type {};
 
-		template <typename FunctionT>
-		struct takes_context<FunctionT, std::void_t<decltype(std::declval<FunctionT>()(std::declval<context>()))>> : std::true_type {};
+        template <typename FunctionT>
+        struct takes_context<FunctionT, std::void_t<decltype(std::declval<FunctionT>()(std::declval<context>()))>> : std::true_type {};
 
-		template <typename FunctionT>
-		constexpr bool takes_context_v = takes_context<FunctionT>();
-	}
+        template <typename FunctionT>
+        constexpr bool takes_context_v = takes_context<FunctionT>();
+    }
 
     class delegate
     {
@@ -58,10 +58,10 @@ namespace jobxx
         static constexpr int max_size = sizeof(void*) * 3;
         static constexpr int max_alignment = alignof(double);
 
-		delegate() = default;
+        delegate() = default;
 
-		delegate(delegate&& rhs) = default;
-		delegate& operator=(delegate&& rhs) = delete;
+        delegate(delegate&& rhs) = default;
+        delegate& operator=(delegate&& rhs) = delete;
 
         template <typename FunctionT> /*implicit*/ delegate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
 
@@ -70,63 +70,63 @@ namespace jobxx
         void operator()(context& ctx) { _thunk(&_storage, ctx); }
 
     private:
-		template <typename FunctionT> static auto _invoke(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>;
-		template <typename FunctionT> static auto _invoke(void* storage, context&) -> std::enable_if_t<!_detail::takes_context_v<FunctionT>>;
+        template <typename FunctionT> static auto _invoke(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>;
+        template <typename FunctionT> static auto _invoke(void* storage, context&) -> std::enable_if_t<!_detail::takes_context_v<FunctionT>>;
 
-		template <typename FunctionT> inline void _assign(FunctionT&& func);
+        template <typename FunctionT> inline void _assign(FunctionT&& func);
 
         void(*_thunk)(void*, context& ctx) = nullptr;
-		std::aligned_storage_t<max_size, max_alignment> _storage;
+        std::aligned_storage_t<max_size, max_alignment> _storage;
     };
 
-	class predicate
-	{
-	public:
-		predicate() = default;
+    class predicate
+    {
+    public:
+        predicate() = default;
 
-		template <typename FunctionT> /*implicit*/ predicate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
+        template <typename FunctionT> /*implicit*/ predicate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
 
-		explicit operator bool() const { return _thunk != nullptr; }
+        explicit operator bool() const { return _thunk != nullptr; }
 
-		bool operator()() { return _thunk(_view); }
+        bool operator()() { return _thunk(_view); }
 
-	private:
-		template <typename FunctionT> inline void _assign(FunctionT&& func);
+    private:
+        template <typename FunctionT> inline void _assign(FunctionT&& func);
 
-		bool(*_thunk)(void*) = nullptr;
-		void* _view = nullptr;
-	};
+        bool(*_thunk)(void*) = nullptr;
+        void* _view = nullptr;
+    };
 
-	template <typename FunctionT>
-	auto delegate::_invoke(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>
-	{
-		(*static_cast<FunctionT*>(storage))(ctx);
-	}
+    template <typename FunctionT>
+    auto delegate::_invoke(void* storage, context& ctx) -> std::enable_if_t<_detail::takes_context_v<FunctionT>>
+    {
+        (*static_cast<FunctionT*>(storage))(ctx);
+    }
 
-	template <typename FunctionT>
-	auto delegate::_invoke(void* storage, context&) -> std::enable_if_t<!_detail::takes_context_v<FunctionT>>
-	{
-		(*static_cast<FunctionT*>(storage))();
-	}
+    template <typename FunctionT>
+    auto delegate::_invoke(void* storage, context&) -> std::enable_if_t<!_detail::takes_context_v<FunctionT>>
+    {
+        (*static_cast<FunctionT*>(storage))();
+    }
 
-	template <typename FunctionT>
-	void delegate::_assign(FunctionT&& func)
-	{
-		static_assert(sizeof(FunctionT) <= max_size, "function too large for jobxx::delegate");
-		static_assert(alignof(FunctionT) <= max_alignment, "function over-aligned for jobxx::delegate");
-		static_assert(std::is_trivially_move_constructible_v<FunctionT>, "function not a trivially move-constructible as required by jobxx::delegate");
-		static_assert(std::is_trivially_destructible_v<FunctionT>, "function not a trivially destructible as required by jobxx::delegate");
+    template <typename FunctionT>
+    void delegate::_assign(FunctionT&& func)
+    {
+        static_assert(sizeof(FunctionT) <= max_size, "function too large for jobxx::delegate");
+        static_assert(alignof(FunctionT) <= max_alignment, "function over-aligned for jobxx::delegate");
+        static_assert(std::is_trivially_move_constructible_v<FunctionT>, "function not a trivially move-constructible as required by jobxx::delegate");
+        static_assert(std::is_trivially_destructible_v<FunctionT>, "function not a trivially destructible as required by jobxx::delegate");
 
-		_thunk = &_invoke<FunctionT>;
-		new (&_storage) FunctionT(std::forward<FunctionT>(func));
-	}
+        _thunk = &_invoke<FunctionT>;
+        new (&_storage) FunctionT(std::forward<FunctionT>(func));
+    }
 
-	template <typename FunctionT>
-	void predicate::_assign(FunctionT&& func)
-	{
-		_thunk = [](void* view){ return (*static_cast<FunctionT*>(view))(); };
-		_view = &func;
-	}
+    template <typename FunctionT>
+    void predicate::_assign(FunctionT&& func)
+    {
+        _thunk = [](void* view){ return (*static_cast<FunctionT*>(view))(); };
+        _view = &func;
+    }
 
 }
 

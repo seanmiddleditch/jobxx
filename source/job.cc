@@ -34,28 +34,28 @@
 
 jobxx::job::~job()
 {
-	if (_impl != nullptr && 0 == --_impl->refs)
-	{
-		delete _impl;
-	}
+    if (_impl != nullptr && 0 == --_impl->refs)
+    {
+        delete _impl;
+    }
 }
 
 jobxx::job& jobxx::job::operator=(job&& rhs)
 {
     if (this != &rhs)
     {
-		if (_impl != nullptr && 0 == --_impl->refs)
-		{
-			delete _impl;
-		}
+        if (_impl != nullptr && 0 == --_impl->refs)
+        {
+            delete _impl;
+        }
 
         _impl = rhs._impl;
         rhs._impl = nullptr;
 
-		if (_impl != nullptr)
-		{
-			++_impl->refs;
-		}
+        if (_impl != nullptr)
+        {
+            ++_impl->refs;
+        }
     }
 
     return *this;

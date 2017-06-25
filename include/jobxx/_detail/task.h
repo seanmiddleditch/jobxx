@@ -40,7 +40,7 @@ namespace jobxx
     namespace _detail
     {
     
-		struct job;
+        struct job;
 
         struct task
         {
