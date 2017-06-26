@@ -45,7 +45,7 @@ namespace jobxx
         using value_type = Value;
 
         template <typename InsertValue> inline void push_back(InsertValue&& task);
-        inline value_type pop_front();
+        inline bool pop_front(value_type& out);
         inline bool maybe_empty() const;
 
     private:
@@ -64,18 +64,18 @@ namespace jobxx
     }
 
     template <typename Value>
-    auto concurrent_queue<Value>::pop_front() -> value_type
+    bool concurrent_queue<Value>::pop_front(value_type& out)
     {
         std::lock_guard<std::mutex> _(_lock);
         if (!_queue.empty())
         {
-            value_type item = _queue.front();
+            out = std::move(_queue.front());
             _queue.pop_front();
-            return item;
+            return true;
         }
         else
         {
-            return nullptr;
+            return false;
         }
     }
 

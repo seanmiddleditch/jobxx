@@ -185,7 +185,9 @@ void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
 
 jobxx::_detail::task* jobxx::_detail::queue::pull_task()
 {
-    return tasks.pop_front();
+    jobxx::_detail::task* item = nullptr;
+    tasks.pop_front(item); // on failure, item is left unmodified, e.g. nullptr
+    return item;
 }
 
 void jobxx::_detail::queue::execute(_detail::task& item)
