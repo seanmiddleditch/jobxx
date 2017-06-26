@@ -34,6 +34,7 @@
 
 #include "jobxx/delegate.h"
 #include "jobxx/concurrent_queue.h"
+#include "jobxx/predicate.h"
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
@@ -41,27 +42,45 @@
 namespace jobxx
 {
 
+    class queue;
+
     namespace _detail
     {
 
         struct job;
         struct task;
+        struct parking_lot;
 
-        struct parked_thread
+        class parkable
         {
-            std::mutex lock;
-            std::condition_variable signal;
-            parked_thread* prev = nullptr;
-            parked_thread* next = nullptr;
+        public:
+            parkable() = default;
+
+            parkable(parkable const&) = delete;
+            parkable& operator=(parkable const&) = delete;
+
+        private:
+            std::condition_variable _cond;
+            parking_lot* _lot = nullptr;
+            parkable* _prev = nullptr;
+            parkable* _next = nullptr;
+
+            friend parking_lot;
+            friend jobxx::queue;
         };
 
         struct parking_lot
         {
+            void park(parkable& thread, predicate pred);
+            void unpark(parkable& thread);
+            void unpark_one() { if (head != nullptr) { unpark(*head); } }
+            void unpark_all();
+
             // FIXME: use a atomic linked list, though note that
             // we may need to keep a mutex to pair with the
             // condition_variable.
             std::mutex lock;
-            parked_thread* head = nullptr;
+            parkable* head = nullptr;
         };
 
         struct queue

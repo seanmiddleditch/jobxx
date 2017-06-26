@@ -35,6 +35,71 @@
 #include "jobxx/_detail/queue.h"
 #include "jobxx/_detail/task.h"
 
+void jobxx::_detail::parking_lot::park(parkable& thread, predicate pred)
+{
+    {
+        std::lock_guard<std::mutex> _(lock);
+
+        thread._next = head;
+        thread._lot = this;
+        head = &thread;
+        if (thread._next != nullptr)
+        {
+            thread._next->_prev = &thread;
+        }
+    }
+
+    // wait until a task is available or the predicate fires
+    {
+        // FIXME: I believe this is a race condition now; we could
+        // park the thread, add a job and signal the condition, then
+        // start waiting. the lack in question needs to be taken or
+        // used by the job posting, which we want to avoid of course,
+        // so this likely just needs to be rethough.
+        std::unique_lock<std::mutex> lock(this->lock);
+        thread._cond.wait(lock, [&thread, &pred, this](){ return thread._lot != this || pred(); });
+    }
+
+    unpark(thread);
+}
+
+void jobxx::_detail::parking_lot::unpark(parkable& thread)
+{
+    // remove thread from list of parked threads
+    // FIXME: this is the race mentioned in spawn_task, and
+    // we should instead here assume that we've been unparked
+    // at this point, and repark ourselves if the condition
+    // variable was "spuriously" woken.
+    {
+        std::lock_guard<std::mutex> _(lock);
+
+        thread._lot = nullptr;
+        if (thread._next != nullptr)
+        {
+            thread._next->_prev = thread._prev;
+        }
+        if (thread._prev != nullptr)
+        {
+            thread._prev->_next = thread._next;
+        }
+        if (&thread == head)
+        {
+            head = thread._next;
+        }
+    }
+
+    thread._cond.notify_one();
+}
+
+void jobxx::_detail::parking_lot::unpark_all()
+{
+    std::lock_guard<std::mutex> _(lock);
+    for (_detail::parkable* parked = head; parked != nullptr; parked = parked->_next)
+    {
+        parked->_cond.notify_one();
+    }
+}
+
 jobxx::queue::queue() : _impl(new _detail::queue) {}
 
 jobxx::queue::~queue()
@@ -80,64 +145,17 @@ void jobxx::queue::work_all()
 
 void jobxx::queue::park(predicate pred)
 {
-    _detail::parked_thread parked;
+    _detail::parkable thread;
 
-    // add thread to list of parked threads
+    _impl->parked.park(thread, [&pred, this]()
     {
-        std::lock_guard<std::mutex> _(_impl->parked.lock);
-
-        parked.next = _impl->parked.head;
-        _impl->parked.head = &parked;
-        if (parked.next != nullptr)
-        {
-            parked.next->prev = &parked;
-        }
-    }
-
-    // wait until a task is available or the predicate fires
-    {
-        // FIXME: I believe this is a race condition now; we could
-        // park the thread, add a job and signal the condition, then
-        // start waiting. the lack in question needs to be taken or
-        // used by the job posting, which we want to avoid of course,
-        // so this likely just needs to be rethough.
-        std::unique_lock<std::mutex> lock(parked.lock);
-        parked.signal.wait(lock, [this, &parked, &pred]()
-        {
-            return !_impl->tasks.maybe_empty() || (pred && pred());
-        });
-    }
-
-    // remove thread from list of parked threads
-    // FIXME: this is the race mentioned in spawn_task, and
-    // we should instead here assume that we've been unparked
-    // at this point, and repark ourselves if the condition
-    // variable was "spuriously" woken.
-    {
-        std::lock_guard<std::mutex> _(_impl->parked.lock);
-
-        if (parked.next != nullptr)
-        {
-            parked.next->prev = parked.prev;
-        }
-        if (parked.prev != nullptr)
-        {
-            parked.prev->next = parked.next;
-        }
-        if (&parked == _impl->parked.head)
-        {
-            _impl->parked.head = parked.next;
-        }
-    }
+        return _impl->tasks.maybe_empty() || (pred && pred());
+    });
 }
 
 void jobxx::queue::unpark_all()
 {
-    std::lock_guard<std::mutex> _(_impl->parked.lock);
-    for (_detail::parked_thread* parked = _impl->parked.head; parked != nullptr; parked = parked->next)
-    {
-        parked->signal.notify_one();
-    }
+    _impl->parked.unpark_all();
 }
 
 jobxx::_detail::job* jobxx::queue::_create_job()
@@ -168,19 +186,7 @@ void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
 
     _detail::task* item = new _detail::task{std::move(work), parent};
     tasks.push_back(item);
-
-    {
-        // FIXME: this can result in the same thread being asked to unpark itself
-        // twice while other threads remain parked. we need to unpark the thread
-        // here and then wake it, and rely on the thread re-parking itself if
-        // there's no work when it wakes up. will need to figure out how to do
-        // that with condition_variable sanely, if possible.
-        std::lock_guard<std::mutex> _(parked.lock);
-        if (parked.head != nullptr)
-        {
-            parked.head->signal.notify_one();
-        }
-    }
+    parked.unpark_one();
 }
 
 jobxx::_detail::task* jobxx::_detail::queue::pull_task()
