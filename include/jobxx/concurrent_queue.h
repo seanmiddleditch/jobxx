@@ -28,8 +28,8 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_DETAIL_CONCURRENT_QUEUE_H)
-#define _guard_JOBXX_DETAIL_CONCURRENT_QUEUE_H
+#if !defined(_guard_JOBXX_CONCURRENT_QUEUE_H)
+#define _guard_JOBXX_CONCURRENT_QUEUE_H
 #pragma once
 
 #include <mutex>
@@ -38,53 +38,54 @@
 namespace jobxx
 {
 
-    namespace _detail
+    template <typename Value>
+    class concurrent_queue
     {
+    public:
+        using value_type = Value;
 
-        struct task;
-        
-        class concurrent_queue
+        template <typename InsertValue> inline void push_back(InsertValue&& task);
+        inline value_type pop_front();
+        inline bool maybe_empty() const;
+
+    private:
+        // FIXME: temporary "just works" data-structure to be
+        // replaced by "lock-free" structure
+        mutable std::mutex _lock;
+        std::deque<value_type> _queue;
+    };
+
+    template <typename Value>
+    template <typename InsertValue>
+    void concurrent_queue<Value>::push_back(InsertValue&& task)
+    {
+        std::lock_guard<std::mutex> _(_lock);
+        _queue.push_back(std::forward<InsertValue>(task));
+    }
+
+    template <typename Value>
+    auto concurrent_queue<Value>::pop_front() -> value_type
+    {
+        std::lock_guard<std::mutex> _(_lock);
+        if (!_queue.empty())
         {
-        public:
-            inline void push_back(_detail::task* task);
-            inline _detail::task* pop_front();
-            inline bool maybe_empty() const;
-
-        private:
-            // FIXME: temporary "just works" data-structure to be
-            // replaced by "lock-free" structure
-            mutable std::mutex _lock;
-            std::deque<_detail::task*> _queue;
-        };
-
-        void concurrent_queue::push_back(_detail::task* task)
-        {
-            std::lock_guard<std::mutex> _(_lock);
-            _queue.push_back(task);
+            value_type item = _queue.front();
+            _queue.pop_front();
+            return item;
         }
-
-        _detail::task* concurrent_queue::pop_front()
+        else
         {
-            std::lock_guard<std::mutex> _(_lock);
-            if (!_queue.empty())
-            {
-                _detail::task* item = _queue.front();
-                _queue.pop_front();
-                return item;
-            }
-            else
-            {
-                return nullptr;
-            }
-        }
-
-        bool concurrent_queue::maybe_empty() const
-        {
-            std::lock_guard<std::mutex> _(_lock);
-            return _queue.empty();
+            return nullptr;
         }
     }
 
+    template <typename Value>
+    bool concurrent_queue<Value>::maybe_empty() const
+    {
+        std::lock_guard<std::mutex> _(_lock);
+        return _queue.empty();
+    }
+    
 }
 
-#endif // defined(_guard_JOBXX_DETAIL_CONCURRENT_QUEUE_H)
+#endif // defined(_guard_JOBXX_CONCURRENT_QUEUE_H)

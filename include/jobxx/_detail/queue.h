@@ -33,7 +33,7 @@
 #pragma once
 
 #include "jobxx/delegate.h"
-#include "concurrent_queue.h"
+#include "jobxx/concurrent_queue.h"
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
@@ -70,7 +70,7 @@ namespace jobxx
             _detail::task* pull_task();
             void execute(_detail::task& item);
 
-            concurrent_queue tasks;
+            concurrent_queue<_detail::task*> tasks;
             parking_lot parked;
         };
 
