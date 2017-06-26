@@ -28,15 +28,12 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_DETAIL_QUEUE_H)
-#define _guard_JOBXX_DETAIL_QUEUE_H
+#if !defined(_guard_JOBXX_DETAIL_CONCURRENT_QUEUE_H)
+#define _guard_JOBXX_DETAIL_CONCURRENT_QUEUE_H
 #pragma once
 
-#include "jobxx/delegate.h"
-#include "concurrent_queue.h"
 #include <mutex>
-#include <condition_variable>
-#include <atomic>
+#include <deque>
 
 namespace jobxx
 {
@@ -44,38 +41,50 @@ namespace jobxx
     namespace _detail
     {
 
-        struct job;
         struct task;
-
-        struct parked_thread
+        
+        class concurrent_queue
         {
-            std::mutex lock;
-            std::condition_variable signal;
-            parked_thread* prev = nullptr;
-            parked_thread* next = nullptr;
+        public:
+            inline void push_back(_detail::task* task);
+            inline _detail::task* pop_front();
+            inline bool maybe_empty() const;
+
+        private:
+            // FIXME: temporary "just works" data-structure to be
+            // replaced by "lock-free" structure
+            mutable std::mutex _lock;
+            std::deque<_detail::task*> _queue;
         };
 
-        struct parking_lot
+        void concurrent_queue::push_back(_detail::task* task)
         {
-            // FIXME: use a atomic linked list, though note that
-            // we may need to keep a mutex to pair with the
-            // condition_variable.
-            std::mutex lock;
-            parked_thread* head = nullptr;
-        };
+            std::lock_guard<std::mutex> _(_lock);
+            _queue.push_back(task);
+        }
 
-        struct queue
+        _detail::task* concurrent_queue::pop_front()
         {
-            void spawn_task(delegate work, _detail::job* parent);
-            _detail::task* pull_task();
-            void execute(_detail::task& item);
+            std::lock_guard<std::mutex> _(_lock);
+            if (!_queue.empty())
+            {
+                _detail::task* item = _queue.front();
+                _queue.pop_front();
+                return item;
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
 
-            concurrent_queue tasks;
-            parking_lot parked;
-        };
-
+        bool concurrent_queue::maybe_empty() const
+        {
+            std::lock_guard<std::mutex> _(_lock);
+            return _queue.empty();
+        }
     }
 
 }
 
-#endif // defined(_guard_JOBXX_DETAIL_QUEUE_H)
+#endif // defined(_guard_JOBXX_DETAIL_CONCURRENT_QUEUE_H)

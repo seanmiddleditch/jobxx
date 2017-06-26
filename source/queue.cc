@@ -96,6 +96,11 @@ void jobxx::queue::park(predicate pred)
 
     // wait until a task is available or the predicate fires
     {
+        // FIXME: I believe this is a race condition now; we could
+        // park the thread, add a job and signal the condition, then
+        // start waiting. the lack in question needs to be taken or
+        // used by the job posting, which we want to avoid of course,
+        // so this likely just needs to be rethough.
         std::unique_lock<std::mutex> lock(parked.lock);
         parked.signal.wait(lock, [this, &parked, &pred]()
         {
