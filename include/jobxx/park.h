@@ -28,35 +28,57 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_DETAIL_QUEUE_H)
-#define _guard_JOBXX_DETAIL_QUEUE_H
+#if !defined(_guard_JOBXX_PARK_H)
+#define _guard_JOBXX_PARK_H
 #pragma once
 
-#include "jobxx/delegate.h"
-#include "jobxx/concurrent_queue.h"
-#include "jobxx/park.h"
+#include "predicate.h"
+#include <mutex>
+#include <condition_variable>
 
 namespace jobxx
 {
 
-    namespace _detail
+    class parking_lot;
+
+    class parkable
     {
+    public:
+        parkable() = default;
 
-        struct job;
-        struct task;
+        parkable(parkable const&) = delete;
+        parkable& operator=(parkable const&) = delete;
 
-        struct queue
-        {
-            void spawn_task(delegate work, _detail::job* parent);
-            _detail::task* pull_task();
-            void execute(_detail::task& item);
+    private:
+        std::condition_variable _cond;
+        parking_lot* _lot = nullptr;
+        parkable* _prev = nullptr;
+        parkable* _next = nullptr;
 
-            concurrent_queue<_detail::task*> tasks;
-            parking_lot parked;
-        };
+        friend parking_lot;
+    };
 
-    }
+    class parking_lot
+    {
+    public:
+        parking_lot() = default;
+
+        parking_lot(parking_lot const&) = delete;
+        parking_lot& operator=(parking_lot const&) = delete;
+
+        void park(parkable& thread, predicate pred);
+        void unpark(parkable& thread);
+        void unpark_one() { if (_head != nullptr) { unpark(*_head); } }
+        void unpark_all();
+
+    private:
+        // FIXME: use a atomic linked list, though note that
+        // we may need to keep a mutex to pair with the
+        // condition_variable.
+        std::mutex _lock;
+        parkable* _head = nullptr;
+    };
 
 }
 
-#endif // defined(_guard_JOBXX_DETAIL_QUEUE_H)
+#endif // defined(_guard_JOBXX_PARK_H)

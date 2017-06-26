@@ -35,71 +35,6 @@
 #include "jobxx/_detail/queue.h"
 #include "jobxx/_detail/task.h"
 
-void jobxx::_detail::parking_lot::park(parkable& thread, predicate pred)
-{
-    {
-        std::lock_guard<std::mutex> _(lock);
-
-        thread._next = head;
-        thread._lot = this;
-        head = &thread;
-        if (thread._next != nullptr)
-        {
-            thread._next->_prev = &thread;
-        }
-    }
-
-    // wait until a task is available or the predicate fires
-    {
-        // FIXME: I believe this is a race condition now; we could
-        // park the thread, add a job and signal the condition, then
-        // start waiting. the lack in question needs to be taken or
-        // used by the job posting, which we want to avoid of course,
-        // so this likely just needs to be rethough.
-        std::unique_lock<std::mutex> lock(this->lock);
-        thread._cond.wait(lock, [&thread, &pred, this](){ return thread._lot != this || pred(); });
-    }
-
-    unpark(thread);
-}
-
-void jobxx::_detail::parking_lot::unpark(parkable& thread)
-{
-    // remove thread from list of parked threads
-    // FIXME: this is the race mentioned in spawn_task, and
-    // we should instead here assume that we've been unparked
-    // at this point, and repark ourselves if the condition
-    // variable was "spuriously" woken.
-    {
-        std::lock_guard<std::mutex> _(lock);
-
-        thread._lot = nullptr;
-        if (thread._next != nullptr)
-        {
-            thread._next->_prev = thread._prev;
-        }
-        if (thread._prev != nullptr)
-        {
-            thread._prev->_next = thread._next;
-        }
-        if (&thread == head)
-        {
-            head = thread._next;
-        }
-    }
-
-    thread._cond.notify_one();
-}
-
-void jobxx::_detail::parking_lot::unpark_all()
-{
-    std::lock_guard<std::mutex> _(lock);
-    for (_detail::parkable* parked = head; parked != nullptr; parked = parked->_next)
-    {
-        parked->_cond.notify_one();
-    }
-}
-
 jobxx::queue::queue() : _impl(new _detail::queue) {}
 
 jobxx::queue::~queue()
@@ -145,7 +80,7 @@ void jobxx::queue::work_all()
 
 void jobxx::queue::park(predicate pred)
 {
-    _detail::parkable thread;
+    parkable thread;
 
     _impl->parked.park(thread, [&pred, this]()
     {

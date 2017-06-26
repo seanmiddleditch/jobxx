@@ -8,6 +8,7 @@ set(JOBXX_PUBLIC_HEADERS
     include/jobxx/context.h
     include/jobxx/delegate.h
     include/jobxx/job.h
+    include/jobxx/park.h
 	include/jobxx/predicate.h
     include/jobxx/queue.h
 )
@@ -19,6 +20,7 @@ set(JOBXX_PRIVATE_HEADERS
 set(JOBXX_SOURCES
     source/context.cc
     source/job.cc
+    source/park.cc
     source/queue.cc
 )
 set(JOBXX_TESTS
