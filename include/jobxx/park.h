@@ -35,6 +35,7 @@
 #include "predicate.h"
 #include <mutex>
 #include <condition_variable>
+#include <deque>
 
 namespace jobxx
 {
@@ -68,15 +69,18 @@ namespace jobxx
 
         void park(parkable& thread, predicate pred);
         void unpark(parkable& thread);
-        void unpark_one() { if (_head != nullptr) { unpark(*_head); } }
+        void unpark_one();
         void unpark_all();
 
     private:
+        void _link(parkable& thread);
+        void _unlink(parkable& thread);
+
         // FIXME: use a atomic linked list, though note that
         // we may need to keep a mutex to pair with the
         // condition_variable.
         std::mutex _lock;
-        parkable* _head = nullptr;
+        std::deque<parkable*> _queue;
     };
 
 }

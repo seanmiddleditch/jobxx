@@ -33,65 +33,91 @@
 
 void jobxx::parking_lot::park(parkable& thread, predicate pred)
 {
+    do
     {
-        std::lock_guard<std::mutex> _(_lock);
+        // must wrap the link operation and is used for the
+        // condition variable.
+        std::unique_lock<std::mutex> lock(_lock);
 
-        thread._next = _head;
-        thread._lot = this;
-        _head = &thread;
-        if (thread._next != nullptr)
+        // we may have been unlinked before being scheduled, but
+        // the predicate may have become false again before being
+        // scheduled, so we have to relink.
+        _link(thread);
+
+        // the condition is either that we've been unparked (the
+        // thread is no longer linked) or the predicate is true.
+        // thread is unlinked when explicitly unparked to make sure
+        // that unpark_one no longer considers the thread; the
+        // predicate, which presumably was true at the time, may
+        // become false again before the thread is scheduled for
+        // execution, so it's possible to become unlinked while
+        // the predicate is false.
+        
+        thread._cond.wait(lock, [&thread, &pred, this]()
         {
-            thread._next->_prev = &thread;
-        }
+            return thread._lot != this || (pred && pred());
+        });
     }
-
-    // wait until a task is available or the predicate fires
-    {
-        // FIXME: I believe this is a race condition now; we could
-        // park the thread, add a job and signal the condition, then
-        // start waiting. the lack in question needs to be taken or
-        // used by the job posting, which we want to avoid of course,
-        // so this likely just needs to be rethough.
-        std::unique_lock<std::mutex> lock(this->_lock);
-        thread._cond.wait(lock, [&thread, &pred, this](){ return thread._lot != this || pred(); });
-    }
-
-    unpark(thread);
+    while (pred && !pred());
 }
 
 void jobxx::parking_lot::unpark(parkable& thread)
 {
-    // remove thread from list of parked threads
-    // FIXME: this is the race mentioned in spawn_task, and
-    // we should instead here assume that we've been unparked
-    // at this point, and repark ourselves if the condition
-    // variable was "spuriously" woken.
+    _unlink(thread);
+    thread._cond.notify_one();
+}
+
+void jobxx::parking_lot::unpark_one()
+{
+    parkable* thread = nullptr;
+
     {
         std::lock_guard<std::mutex> _(_lock);
-
-        thread._lot = nullptr;
-        if (thread._next != nullptr)
+        if (!_queue.empty())
         {
-            thread._next->_prev = thread._prev;
-        }
-        if (thread._prev != nullptr)
-        {
-            thread._prev->_next = thread._next;
-        }
-        if (&thread == _head)
-        {
-            _head = thread._next;
+            thread = _queue.front();
+            _queue.pop_front();
         }
     }
 
-    thread._cond.notify_one();
+    if (thread != nullptr)
+    {
+        // FIXME: _lot needs to be protected, maybe an atomic
+        thread->_lot = nullptr;
+        thread->_cond.notify_one();
+    }
 }
 
 void jobxx::parking_lot::unpark_all()
 {
     std::lock_guard<std::mutex> _(_lock);
-    for (parkable* parked = _head; parked != nullptr; parked = parked->_next)
+    for (parkable* parked : _queue)
     {
+        parked->_lot = nullptr;
         parked->_cond.notify_one();
+    }
+    _queue.clear();
+}
+
+void jobxx::parking_lot::_link(parkable& thread)
+{
+    if (thread._lot != this)
+    {
+        thread._lot = this;
+        _queue.push_back(&thread);
+    }
+}
+
+void jobxx::parking_lot::_unlink(parkable& thread)
+{
+    std::lock_guard<std::mutex> _(_lock);
+
+    if (thread._lot == this)
+    {
+        auto it = std::find(_queue.begin(), _queue.end(), &thread);
+        if (it != _queue.end())
+        {
+            _queue.erase(it);
+        }
     }
 }
