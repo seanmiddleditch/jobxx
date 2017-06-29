@@ -39,8 +39,7 @@ jobxx::queue::queue() : _impl(new _detail::queue) {}
 
 jobxx::queue::~queue()
 {
-    work_all(); // finish any remaining tasks
-    unpark_all(); // unpark any threads - FIXME: diallow re-parking
+    close();
     delete _impl;
 }
 
@@ -48,10 +47,13 @@ void jobxx::queue::wait_job_actively(job const& awaited)
 {
     while (!awaited.complete())
     {
-        work_one();
-        // FIXME: park if work_one has no work, but only
-        //  when we support parking on both a queue and a
-        //  job. until then, back-off may be appropriate.
+        if (!work_one())
+        {
+            // FIXME: park if work_one has no work, but only
+            //  when we support parking on both a queue and a
+            //  job. until then, back-off may be appropriate.
+            std::this_thread::yield();
+        }
     }
 }
 
@@ -78,19 +80,30 @@ void jobxx::queue::work_all()
     }
 }
 
-void jobxx::queue::park(predicate pred)
+void jobxx::queue::work_forever()
 {
     parkable thread;
 
-    _impl->parked.park(thread, [&pred, this]()
+    while (!_impl->parked.closed())
     {
-        return _impl->tasks.maybe_empty() || (pred && pred());
-    });
+        work_all();
+        thread.park(_impl->parked);
+    }
 }
 
-void jobxx::queue::unpark_all()
+void jobxx::queue::close()
 {
-    _impl->parked.unpark_all();
+    // before closing _try_ to empty the task queue
+    work_all();
+
+    // close the parking lot, which ensures nobody is
+    // blocked on this queue
+    _impl->parked.close();
+
+    // actually finish any work remaining, knowing
+    // that no new work can be added to the queue
+    // after closing the lot.
+    work_all();
 }
 
 jobxx::_detail::job* jobxx::queue::_create_job()
@@ -105,6 +118,13 @@ void jobxx::queue::spawn_task(delegate&& work)
 
 void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
 {
+    // we can't spawn tasks on closed queue
+    if (parked.closed())
+    {
+        // FIXME: signal error in some way
+        return;
+    }
+
     if (parent != nullptr)
     {
         // increment the number of pending tasks

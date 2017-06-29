@@ -34,6 +34,35 @@
 
 #include <thread>
 #include <atomic>
+#include <array>
+
+bool basic_test_one(jobxx::queue& queue)
+{
+    int num = 0x1337c0de;
+    int num2 = 0x600df00d;
+
+    jobxx::job job = queue.create_job([&num, &num2](jobxx::context& ctx)
+    {
+        // spawn a task in the job (with no task context)
+        ctx.spawn_task([&num](){ num = 0xdeadbeef; });
+
+        // spawn a task in the job (with task context)
+        ctx.spawn_task([&num2](jobxx::context& ctx)
+        {
+            num2 = 0xdeadbeee;
+
+            ctx.spawn_task([&num2](){ ++num2; });
+        });
+    });
+    queue.wait_job_actively(job);
+
+    if (num != 0xdeadbeef || num2 != 0xdeadbeef)
+    {
+        return false;
+    }
+
+    return true;
+}
 
 bool basic_test()
 {
@@ -42,49 +71,22 @@ bool basic_test()
     for (int i = 0; i < 10; ++i)
     {
         jobxx::queue queue;
-
-        int num = 0x1337c0de;
-        int num2 = 0x600df00d;
-
-        jobxx::job job = queue.create_job([&num, &num2](jobxx::context& ctx)
-        {
-            // spawn a task in the job (with no task context)
-            ctx.spawn_task([&num](){ num = 0xdeadbeef; });
-
-            // spawn a task in the job (with task context)
-            ctx.spawn_task([&num2](jobxx::context& ctx)
-            {
-                num2 = 0xdeadbeee;
-
-                ctx.spawn_task([&num2](){ ++num2; });
-            });
-        });
-        queue.wait_job_actively(job);
-
-        if (num != 0xdeadbeef || num2 != 0xdeadbeef)
+        if (!basic_test_one(queue))
         {
             return false;
         }
     }
-
     return true;
 }
 
-bool thread_test()
+bool thread_test_one()
 {
     jobxx::queue queue;
-    std::atomic<bool> done = false;
 
-    std::thread worker([&queue, &done]()
-    {
-        while (!done)
-        {
-            if (!queue.work_one())
-            {
-                queue.park([&done]{ return done.load(); });
-            }
-        }
-    });
+    std::array<std::thread, 2> workers{
+        std::thread([&queue](){ queue.work_forever(); }),
+        std::thread([&queue](){ queue.work_forever(); })
+    };
 
     std::atomic<int> counter = 0;
     for (int inc = 1; inc != 5; ++inc)
@@ -100,11 +102,27 @@ bool thread_test()
         queue.work_all();
     }
 
-    done = true;
 
-    queue.unpark_all();
-    worker.join();
+    queue.close();
+    for (auto& worker : workers)
+    {
+        worker.join();
+    }
 
+    return true;
+}
+
+bool thread_test()
+{
+    // execute the test 10 times in naive hopes of catching races
+    // FIXME: do this smarter
+    for (int i = 0; i < 10; ++i)
+    {
+        if (!thread_test_one())
+        {
+            return false;
+        }
+    }
     return true;
 }
 

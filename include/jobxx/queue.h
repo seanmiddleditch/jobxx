@@ -33,7 +33,6 @@
 #pragma once
 
 #include "delegate.h"
-#include "predicate.h"
 #include "job.h"
 #include "context.h"
 #include <utility>
@@ -59,9 +58,10 @@ namespace jobxx
 
         bool work_one();
         void work_all();
+        void work_forever();
 
-        void park(predicate pred = {});
-        void unpark_all();
+        void close();
+        bool closed() const;
 
     private:
         _detail::job* _create_job();

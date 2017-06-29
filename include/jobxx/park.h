@@ -32,10 +32,10 @@
 #define _guard_JOBXX_PARK_H
 #pragma once
 
-#include "predicate.h"
 #include <mutex>
 #include <condition_variable>
 #include <deque>
+#include <atomic>
 
 namespace jobxx
 {
@@ -50,11 +50,15 @@ namespace jobxx
         parkable(parkable const&) = delete;
         parkable& operator=(parkable const&) = delete;
 
+        void park(parking_lot& lot);
+
     private:
+        void _park();
+        bool _unpark();
+
+        std::mutex _lock;
         std::condition_variable _cond;
-        parking_lot* _lot = nullptr;
-        parkable* _prev = nullptr;
-        parkable* _next = nullptr;
+        std::atomic<bool> _parking = false;
 
         friend parking_lot;
     };
@@ -63,24 +67,29 @@ namespace jobxx
     {
     public:
         parking_lot() = default;
+        ~parking_lot() { close() ;}
 
         parking_lot(parking_lot const&) = delete;
         parking_lot& operator=(parking_lot const&) = delete;
 
-        void park(parkable& thread, predicate pred);
-        void unpark(parkable& thread);
-        void unpark_one();
-        void unpark_all();
+        bool unpark_one();
+
+        void close();
+        bool closed() const { return _closed; }
 
     private:
-        void _link(parkable& thread);
-        void _unlink(parkable& thread);
+        bool _park(parkable& thread);
 
-        // FIXME: use a atomic linked list, though note that
-        // we may need to keep a mutex to pair with the
-        // condition_variable.
+        // FIXME: consider something like an
+        // atomic linked list here to reduce
+        // contention. whatever is used requires
+        // fast insert and erase, and especially
+        // fast erase-from-start.
         std::mutex _lock;
         std::deque<parkable*> _queue;
+        bool _closed = false;
+
+        friend parkable;
     };
 
 }

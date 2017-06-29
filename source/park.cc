@@ -31,93 +31,109 @@
 
 #include "jobxx/park.h"
 
-void jobxx::parking_lot::park(parkable& thread, predicate pred)
+void jobxx::parkable::park(parking_lot& lot)
 {
-    do
+    // we can't be parked again if we're already parked
+    bool expected = false;
+    if (!_parking.compare_exchange_strong(expected, true))
     {
-        // must wrap the link operation and is used for the
-        // condition variable.
-        std::unique_lock<std::mutex> lock(_lock);
-
-        // we may have been unlinked before being scheduled, but
-        // the predicate may have become false again before being
-        // scheduled, so we have to relink.
-        _link(thread);
-
-        // the condition is either that we've been unparked (the
-        // thread is no longer linked) or the predicate is true.
-        // thread is unlinked when explicitly unparked to make sure
-        // that unpark_one no longer considers the thread; the
-        // predicate, which presumably was true at the time, may
-        // become false again before the thread is scheduled for
-        // execution, so it's possible to become unlinked while
-        // the predicate is false.
-        
-        thread._cond.wait(lock, [&thread, &pred, this]()
-        {
-            return thread._lot != this || (pred && pred());
-        });
+        return;
     }
-    while (pred && !pred());
-}
 
-void jobxx::parking_lot::unpark(parkable& thread)
-{
-    _unlink(thread);
-    thread._cond.notify_one();
-}
-
-void jobxx::parking_lot::unpark_one()
-{
-    parkable* thread = nullptr;
-
+    // link into the parking lot(s) that we want to be
+    // awoken by. note that our parked state is not
+    // guaranteed to still be true by the end of this
+    // process, so _wait must deal with that.
+    if (!lot._park(*this))
     {
+        _parking = false;
+        return;
+    }
+
+    _park();
+}
+
+void jobxx::parkable::_park()
+{
+    std::unique_lock<std::mutex> lock(_lock);
+    _cond.wait(lock, [&parked = _parking]()
+    {
+        return !parked;
+    });
+}
+
+bool jobxx::parkable::_unpark()
+{
+    // signal a thread to awaken _if_ it's currently parked.
+    bool expected = true;
+    bool const awoken = _parking.compare_exchange_strong(expected, false);
+    if (awoken)
+    {
+        // the lock is held to avoid a race; condition_variable
+        // conditions can _only_ be modified under the lock used
+        // to wait to avoid a race condition. by holding the lock,
+        // we ensure that the condition_variable cannot be actively
+        // querying its condition at the time we signal it, and
+        // that it either hasn't queried yet or that it's for-sure
+        // blocking and waiting for the notify.
+        // FIXME: we can make this more efficient on some
+        // platforms.
         std::lock_guard<std::mutex> _(_lock);
-        if (!_queue.empty())
+        _cond.notify_one();
+    }
+    return awoken;
+}
+
+bool jobxx::parking_lot::_park(parkable& thread)
+{
+    std::lock_guard<std::mutex> _(_lock);
+
+    // if the parking lot is already closed, we cannot park
+    if (_closed)
+    {
+        return false;
+    }
+
+    // this is how we know to wake the thread
+    _queue.push_back(&thread);
+
+    return true;
+}
+
+bool jobxx::parking_lot::unpark_one()
+{
+    std::lock_guard<std::mutex> _(_lock);
+
+    while (!_queue.empty())
+    {
+        parkable* thread = _queue.front();
+        _queue.pop_front();
+
+        // keep looping until we awaken a thread;
+        // a thread may already be unparked by another
+        // thread even though it was still in our queue.
+        if (thread->_unpark())
         {
-            thread = _queue.front();
-            _queue.pop_front();
+            return true;
         }
     }
 
-    if (thread != nullptr)
-    {
-        // FIXME: _lot needs to be protected, maybe an atomic
-        thread->_lot = nullptr;
-        thread->_cond.notify_one();
-    }
+    return false;
 }
 
-void jobxx::parking_lot::unpark_all()
+void jobxx::parking_lot::close()
 {
     std::lock_guard<std::mutex> _(_lock);
+
+    // we can only modify this under the lock; signals
+    // that no new threds can be parked, and any
+    // parked threads that awaken must unpark
+    _closed = true;
+
+    // tell all currently-parked threads to awaken
     for (parkable* parked : _queue)
     {
-        parked->_lot = nullptr;
-        parked->_cond.notify_one();
+        parked->_unpark();
     }
     _queue.clear();
-}
-
-void jobxx::parking_lot::_link(parkable& thread)
-{
-    if (thread._lot != this)
-    {
-        thread._lot = this;
-        _queue.push_back(&thread);
-    }
-}
-
-void jobxx::parking_lot::_unlink(parkable& thread)
-{
-    std::lock_guard<std::mutex> _(_lock);
-
-    if (thread._lot == this)
-    {
-        auto it = std::find(_queue.begin(), _queue.end(), &thread);
-        if (it != _queue.end())
-        {
-            _queue.erase(it);
-        }
-    }
 }
