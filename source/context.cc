@@ -22,7 +22,7 @@
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
 #include "jobxx/context.h"
-#include "jobxx/_detail/queue.h"
+#include "jobxx/_detail/queue_impl.h"
 
 void jobxx::context::spawn_task(delegate&& work)
 {

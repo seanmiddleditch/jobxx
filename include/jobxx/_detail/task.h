@@ -40,12 +40,12 @@ namespace jobxx
     namespace _detail
     {
     
-        struct job;
+        struct job_impl;
 
         struct task
         {
             delegate work;
-            _detail::job* parent = nullptr;
+            _detail::job_impl* parent = nullptr;
         };
 
     }    

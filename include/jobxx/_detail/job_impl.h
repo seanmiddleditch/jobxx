@@ -40,7 +40,7 @@ namespace jobxx
     namespace _detail
     {
 
-        struct job
+        struct job_impl
         {
             std::atomic<int> refs = 1;
             std::atomic<int> tasks = 0;

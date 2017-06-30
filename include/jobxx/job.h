@@ -35,7 +35,7 @@
 namespace jobxx
 {
 
-    namespace _detail { struct job; }
+    namespace _detail { struct job_impl; }
     class parking_lot;
 
     class job
@@ -45,7 +45,7 @@ namespace jobxx
         ~job();
 
         // note this does not increment refs!
-        explicit job(_detail::job& impl) : _impl(&impl) {}
+        explicit job(_detail::job_impl& impl) : _impl(&impl) {}
 
         job(job&& rhs) : _impl(rhs._impl) { rhs._impl = nullptr; }
         job& operator=(job&& rhs);
@@ -57,7 +57,7 @@ namespace jobxx
         parking_lot& lot() const;
 
     private:
-        _detail::job* _impl = nullptr;
+        _detail::job_impl* _impl = nullptr;
     };
     
 }

@@ -30,7 +30,7 @@
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
 #include "jobxx/job.h"
-#include "jobxx/_detail/job.h"
+#include "jobxx/_detail/job_impl.h"
 
 jobxx::job::~job()
 {

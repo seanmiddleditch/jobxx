@@ -40,7 +40,7 @@
 namespace jobxx
 {
 
-    namespace _detail { struct queue; }
+    namespace _detail { struct queue_impl; }
 
     class queue
     {
@@ -63,15 +63,15 @@ namespace jobxx
         void close();
 
     private:
-        _detail::job* _create_job();
+        _detail::job_impl* _create_job();
 
-        _detail::queue* _impl = nullptr;
+        _detail::queue_impl* _impl = nullptr;
     };
 
     template <typename InitFunctionT>
     job queue::create_job(InitFunctionT&& initializer)
     {
-        _detail::job* job_impl = _create_job();
+        _detail::job_impl* job_impl = _create_job();
         context ctx(*_impl, job_impl);
         initializer(ctx);
         return job(*job_impl);

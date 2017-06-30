@@ -31,11 +31,11 @@
 
 #include "jobxx/queue.h"
 #include "jobxx/job.h"
-#include "jobxx/_detail/job.h"
-#include "jobxx/_detail/queue.h"
+#include "jobxx/_detail/job_impl.h"
+#include "jobxx/_detail/queue_impl.h"
 #include "jobxx/_detail/task.h"
 
-jobxx::queue::queue() : _impl(new _detail::queue) {}
+jobxx::queue::queue() : _impl(new _detail::queue_impl) {}
 
 jobxx::queue::~queue()
 {
@@ -127,9 +127,9 @@ void jobxx::queue::close()
     work_all();
 }
 
-jobxx::_detail::job* jobxx::queue::_create_job()
+jobxx::_detail::job_impl* jobxx::queue::_create_job()
 {
-    return new _detail::job;
+    return new _detail::job_impl;
 }
 
 void jobxx::queue::spawn_task(delegate&& work)
@@ -137,7 +137,7 @@ void jobxx::queue::spawn_task(delegate&& work)
     _impl->spawn_task(std::move(work), nullptr);
 }
 
-void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
+void jobxx::_detail::queue_impl::spawn_task(delegate work, _detail::job_impl* parent)
 {
     // we can't spawn tasks on closed queue
     if (closed.load(std::memory_order_acquire))
@@ -165,14 +165,14 @@ void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
     lot.unpark_one();
 }
 
-jobxx::_detail::task* jobxx::_detail::queue::pull_task()
+jobxx::_detail::task* jobxx::_detail::queue_impl::pull_task()
 {
     jobxx::_detail::task* item = nullptr;
     tasks.pop_front(item); // on failure, item is left unmodified, e.g. nullptr
     return item;
 }
 
-void jobxx::_detail::queue::execute(_detail::task& item)
+void jobxx::_detail::queue_impl::execute(_detail::task& item)
 {
     if (item.work)
     {

@@ -43,12 +43,12 @@ namespace jobxx
     namespace _detail
     {
 
-        struct job;
+        struct job_impl;
         struct task;
 
-        struct queue
+        struct queue_impl
         {
-            void spawn_task(delegate work, _detail::job* parent);
+            void spawn_task(delegate work, _detail::job_impl* parent);
             _detail::task* pull_task();
             void execute(_detail::task& item);
 
