@@ -40,6 +40,8 @@
 namespace jobxx
 {
 
+    enum class spawn_result;
+
     namespace _detail
     {
 
@@ -48,7 +50,7 @@ namespace jobxx
 
         struct queue_impl
         {
-            void spawn_task(delegate work, _detail::job_impl* parent);
+            spawn_result spawn_task(delegate work, _detail::job_impl* parent);
             _detail::task* pull_task();
             void execute(_detail::task* item);
 

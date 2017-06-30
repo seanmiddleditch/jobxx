@@ -24,7 +24,7 @@
 #include "jobxx/context.h"
 #include "jobxx/_detail/queue_impl.h"
 
-void jobxx::context::spawn_task(delegate&& work)
+auto jobxx::context::spawn_task(delegate&& work) -> spawn_result
 {
-    _queue.spawn_task(std::move(work), _job);
+    return _queue.spawn_task(std::move(work), _job);
 }

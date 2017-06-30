@@ -148,18 +148,23 @@ jobxx::_detail::job_impl* jobxx::queue::_create_job()
     return new _detail::job_impl;
 }
 
-void jobxx::queue::spawn_task(delegate&& work)
+auto jobxx::queue::spawn_task(delegate&& work) -> spawn_result
 {
-    _impl->spawn_task(std::move(work), nullptr);
+    return _impl->spawn_task(std::move(work), nullptr);
 }
 
-void jobxx::_detail::queue_impl::spawn_task(delegate work, _detail::job_impl* parent)
+auto jobxx::_detail::queue_impl::spawn_task(delegate work, _detail::job_impl* parent) -> spawn_result
 {
+    // task with no work is not allowed/useful
+    if (!work)
+    {
+        return spawn_result::empty_function;
+    }
+
     // we can't spawn tasks on closed queue
     if (closed.load(std::memory_order_acquire))
     {
-        // FIXME: signal error in some way
-        return;
+        return spawn_result::queue_full;
     }
 
     if (parent != nullptr)
@@ -179,6 +184,8 @@ void jobxx::_detail::queue_impl::spawn_task(delegate work, _detail::job_impl* pa
     _detail::task* item = new _detail::task{std::move(work), parent};
     tasks.push_back(item);
     lot.unpark_one();
+
+    return spawn_result::success;
 }
 
 jobxx::_detail::task* jobxx::_detail::queue_impl::pull_task()

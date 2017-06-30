@@ -43,6 +43,8 @@ namespace jobxx
         struct queue_impl;
     }
 
+    enum class spawn_result;
+
     class context
     {
     public:
@@ -51,7 +53,7 @@ namespace jobxx
         context(context const&) = delete;
         context& operator=(context const&) = delete;
 
-        void spawn_task(delegate&& work);
+        spawn_result spawn_task(delegate&& work);
 
     private:
         _detail::queue_impl& _queue;

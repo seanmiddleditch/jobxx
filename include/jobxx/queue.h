@@ -42,6 +42,14 @@ namespace jobxx
 
     namespace _detail { struct queue_impl; }
 
+    enum class spawn_result
+    {
+        success,
+        queue_full,
+        empty_function,
+        queue_closed
+    };
+
     class queue
     {
     public:
@@ -52,7 +60,7 @@ namespace jobxx
         queue& operator=(queue const&) = delete;
 
         template <typename InitFunctionT> job create_job(InitFunctionT&& initializer);
-        void spawn_task(delegate&& work);
+        spawn_result spawn_task(delegate&& work);
 
         void wait_job_actively(job const& awaited);
 
