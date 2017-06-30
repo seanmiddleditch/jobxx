@@ -144,62 +144,31 @@ void jobxx::parking_lot::_link(parking_spot& spot, parkable& thread)
     std::lock_guard<spinlock> _(_lock);
 
     spot._thread = &thread;
-
-    // this is how we know to wake the thread
-    if (_tail != nullptr)
-    {
-        _tail->_next = &spot;
-        _tail = &spot;
-    }
-    else
-    {
-        _head = _tail = &spot;
-    }
+    spot._next = &_parked;
+    spot._prev = _parked._prev;
+    spot._prev->_next = &spot;
+    _parked._prev = &spot;
 }
 
 void jobxx::parking_lot::_unlink(parking_spot& spot)
 {
     std::lock_guard<spinlock> _(_lock);
 
-    if (_head == &spot)
-    {
-        _head = spot._next;
-        if (_tail == &spot)
-        {
-            _tail = nullptr;
-        }
-    }
-    else if (_head != nullptr)
-    {
-        for (parking_spot* iter = _head; iter->_next != nullptr; iter = iter->_next)
-        {
-            if (iter->_next == &spot)
-            {
-                iter->_next = spot._next;
-                if (_tail == &spot)
-                {
-                    _tail = iter;
-                }
-                break;
-            }
-        }
-    }
+    spot._next->_prev = spot._prev;
+    spot._prev->_next = spot._next;
 }
 
 bool jobxx::parking_lot::unpark_one()
 {
     std::lock_guard<spinlock> _(_lock);
 
-    while (_head != nullptr)
+    while (_parked._next != &_parked)
     {
-        parking_spot* const spot = _head;
-        _head = _head->_next;
-        if (_tail == spot)
-        {
-            _tail = nullptr;
-        }
+        parking_spot* const spot = _parked._next;
+        _parked._next = _parked._next->_next;
+        _parked._next->_prev = &_parked;
 
-        spot->_next = nullptr;
+        spot->_prev = spot->_next = spot;
 
         // keep looping until we awaken a thread;
         // a thread may already be unparked by another
@@ -218,13 +187,13 @@ void jobxx::parking_lot::unpark_all()
     std::lock_guard<spinlock> _(_lock);
 
     // tell all currently-parked threads to awaken
-    parking_spot* spot = _head;
-    while (spot != nullptr)
+    parking_spot* spot = _parked._next;
+    while (spot != &_parked)
     {
         parking_spot* const next = spot->_next;
-        spot->_next = nullptr;
+        spot->_prev = spot->_next = spot;
         spot->_thread->_unpark();
         spot = next;
     }
-    _head = _tail = nullptr;
+    _parked._prev = _parked._next = &_parked;
 }

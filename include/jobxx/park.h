@@ -74,7 +74,8 @@ namespace jobxx
 
     private:
         parkable* _thread = nullptr;
-        parking_spot* _next = nullptr;
+        parking_spot* _next = this;
+        parking_spot* _prev = this;
 
         friend parking_lot;
     };
@@ -96,7 +97,7 @@ namespace jobxx
         void _unlink(parking_spot& spot);
         
         spinlock _lock;
-        parking_spot* _head = nullptr;
+        parking_spot _parked;
         parking_spot* _tail = nullptr;
 
         friend parkable;
