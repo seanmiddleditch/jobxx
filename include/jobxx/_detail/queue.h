@@ -53,7 +53,7 @@ namespace jobxx
             void execute(_detail::task& item);
 
             concurrent_queue<_detail::task*> tasks;
-            parking_lot parked;
+            parking_lot lot;
             std::atomic<bool> closed = false;
         };
 

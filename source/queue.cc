@@ -62,7 +62,7 @@ void jobxx::queue::wait_job_actively(job const& awaited)
         // is also complete, so we do no work. the
         // multi-lot park function needs to indicate
         // which lot unparked the thread.
-        thread.park_until(_impl->parked, awaited.lot(), [this, &awaited]
+        thread.park_until(_impl->lot, awaited.lot(), [this, &awaited]
         {
             // FIXME: don't actually do work here, just deque the task
             return awaited.complete() || work_one();
@@ -101,7 +101,7 @@ void jobxx::queue::work_forever()
     {
         work_all();
 
-        thread.park_until(_impl->parked, [this]
+        thread.park_until(_impl->lot, [this]
         {
             // FIXME: don't actually do work here, just deque the task
             return work_one() || _impl->closed.load(std::memory_order_relaxed);
@@ -119,7 +119,7 @@ void jobxx::queue::close()
     // after we mark the queue as closed (which
     // prevents reparking).
     _impl->closed.store(true);
-    _impl->parked.unpark_all();
+    _impl->lot.unpark_all();
 
     // actually finish any work remaining, knowing
     // that no new work can be added to the queue
@@ -162,7 +162,7 @@ void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
 
     _detail::task* item = new _detail::task{std::move(work), parent};
     tasks.push_back(item);
-    parked.unpark_one();
+    lot.unpark_one();
 }
 
 jobxx::_detail::task* jobxx::_detail::queue::pull_task()
