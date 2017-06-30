@@ -35,147 +35,143 @@
 #include <thread>
 #include <atomic>
 #include <array>
+#include <vector>
 
-// test the general queue/task/job system _without_ threads
-bool basic_test_one(jobxx::queue& queue)
+// test utilities and helpers
+namespace
 {
-    int num = 0x1337c0de;
-    int num2 = 0x600df00d;
 
-    jobxx::job job = queue.create_job([&num, &num2](jobxx::context& ctx)
+    class worker_pool
     {
-        // spawn a task in the job (with no task context)
-        ctx.spawn_task([&num](){ num = 0xdeadbeef; });
-
-        // spawn a task in the job (with task context)
-        ctx.spawn_task([&num2](jobxx::context& ctx)
+    public:
+        explicit worker_pool(int threads)
         {
-            num2 = 0xdeadbeee;
+            for (int i = 0; i < threads; ++i)
+            {
+                _threads.emplace_back([this](){ _queue.work_forever(); });
+            }
+        }
 
-            ctx.spawn_task([&num2](){ ++num2; });
-        });
-    });
-    queue.wait_job_actively(job);
+        jobxx::queue& queue() { return _queue; }
 
-    if (num != 0xdeadbeef || num2 != 0xdeadbeef)
+        ~worker_pool()
+        {
+            _queue.close();
+            for (auto& thread : _threads)
+            {
+                thread.join();
+            }
+        }
+
+    private:
+        jobxx::queue _queue;
+        std::vector<std::thread> _threads;
+    };
+
+    static bool execute(bool(*test)())
     {
-        return false;
+        // execute the test 10 times in naive hopes of catching races
+        // FIXME: do this smarter
+        for (int i = 0; i < 10; ++i)
+        {
+            if (!test())
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
-    return true;
+    template <typename ContextT, typename FunctionT>
+    static void spawn_n(ContextT& context, int count, FunctionT&& func)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            context.spawn_task(func);
+        }
+    }
+
 }
 
-bool basic_test()
+// our tests
+namespace
 {
-    // execute the test 10 times in naive hopes of catching races
-    // FIXME: do this smarter
-    for (int i = 0; i < 10; ++i)
+
+    // test the general queue/task/job system _without_ threads
+    static bool basic_test()
     {
         jobxx::queue queue;
-        if (!basic_test_one(queue))
+
+        int num = 0x1337c0de;
+        int num2 = 0x600df00d;
+
+        jobxx::job job = queue.create_job([&num, &num2](jobxx::context& ctx)
+        {
+            // spawn a task in the job (with no task context)
+            ctx.spawn_task([&num](){ num = 0xdeadbeef; });
+
+            // spawn a task in the job (with task context)
+            ctx.spawn_task([&num2](jobxx::context& ctx)
+            {
+                num2 = 0xdeadbeee;
+
+                ctx.spawn_task([&num2](){ ++num2; });
+            });
+        });
+        queue.wait_job_actively(job);
+
+        if (num != 0xdeadbeef || num2 != 0xdeadbeef)
         {
             return false;
         }
+
+        return true;
     }
-    return true;
-}
 
-// test background threads and the main thread actively working together
-bool thread_test_one()
-{
-    jobxx::queue queue;
-
-    std::array<std::thread, 2> workers{
-        std::thread([&queue](){ queue.work_forever(); }),
-        std::thread([&queue](){ queue.work_forever(); })
-    };
-
-    std::atomic<int> counter = 0;
-    for (int inc = 1; inc != 5; ++inc)
+    // test background threads and the main thread actively working together
+    static bool thread_test()
     {
-        for (int ji = 0; ji != 1000; ++ji)
+        worker_pool pool(4);
+
+        std::atomic<int> counter = 0;
+        for (int inc = 1; inc != 5; ++inc)
         {
-            queue.spawn_task([&counter, inc](){ counter += inc; });
+            spawn_n(pool.queue(), 1000, [&counter, inc](){ counter += inc; });
         }
-    }
 
-    while (counter != (1000 + 2000 + 3000 + 4000))
-    {
-        queue.work_all();
-    }
-
-
-    queue.close();
-    for (auto& worker : workers)
-    {
-        worker.join();
-    }
-
-    return true;
-}
-
-bool thread_test()
-{
-    // execute the test 10 times in naive hopes of catching races
-    // FIXME: do this smarter
-    for (int i = 0; i < 10; ++i)
-    {
-        if (!thread_test_one())
+        while (counter != (1000 + 2000 + 3000 + 4000))
         {
-            return false;
+            pool.queue().work_all();
         }
-    }
-    return true;
-}
 
-// test background threads working while the main thread does not execute tasks
-bool inactive_wait_thread_test_one()
-{
-    jobxx::queue queue;
-
-    std::array<std::thread, 2> workers{
-        std::thread([&queue](){ queue.work_forever(); }),
-        std::thread([&queue](){ queue.work_forever(); })
-    };
-
-    std::atomic<int> counter = 0;
-    constexpr int target = 10000;
-    for (int i = 0; i != target; ++i)
-    {
-        queue.spawn_task([&counter](){ counter += 1; });
+        return true;
     }
 
-    // do _not
-    while (counter != target)
+    // test background threads working while the main thread does not execute tasks
+    static bool inactive_wait_thread_test()
     {
-        std::this_thread::yield();
-    }
+        worker_pool pool(4);
 
+        std::atomic<int> counter = 0;
+        constexpr int target = 10000;
+        spawn_n(pool.queue(), target, [&counter](){ counter += 1; });
 
-    queue.close();
-    for (auto& worker : workers)
-    {
-        worker.join();
-    }
-
-    return true;
-}
-
-bool inactive_wait_thread_test()
-{
-    // execute the test 10 times in naive hopes of catching races
-    // FIXME: do this smarter
-    for (int i = 0; i < 10; ++i)
-    {
-        if (!inactive_wait_thread_test_one())
+        // do _not_ wait actively here
+        while (counter != target)
         {
-            return false;
+            std::this_thread::yield();
         }
+
+        return true;
     }
-    return true;
+
 }
 
 int main()
 {
-    return !(basic_test() && thread_test() && inactive_wait_thread_test());
+    return !(
+        execute(&basic_test) &&
+        execute(&thread_test) &&
+        execute(&inactive_wait_thread_test)
+    );
 }
