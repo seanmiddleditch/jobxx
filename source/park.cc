@@ -131,8 +131,6 @@ bool jobxx::parkable::_unpark()
         // querying its condition at the time we signal it, and
         // that it either hasn't queried yet or that it's for-sure
         // blocking and waiting for the notify.
-        // FIXME: we can make this more efficient on some
-        // platforms.
         std::lock_guard<std::mutex> _(_lock);
         _cond.notify_one();
     }

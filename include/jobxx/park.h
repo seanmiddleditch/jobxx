@@ -57,6 +57,8 @@ namespace jobxx
     private:
         bool _unpark();
 
+        // FIXME: we can make this more efficient on some platforms.
+        // Linux, Win8+, etc. can sleep on the atomic's value/address (futexes).
         std::mutex _lock;
         std::condition_variable _cond;
         std::atomic<bool> _parked = false;
