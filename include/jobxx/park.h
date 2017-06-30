@@ -59,7 +59,21 @@ namespace jobxx
         std::mutex _lock;
         std::condition_variable _cond;
         std::atomic<bool> _parking = false;
-        parkable* _next = nullptr;
+
+        friend parking_lot;
+    };
+
+    class parking_spot
+    {
+    public:
+        parking_spot() = default;
+
+        parking_spot(parking_spot const&) = delete;
+        parking_spot& operator=(parking_spot const&) = delete;
+
+    private:
+        parkable* _thread = nullptr;
+        parking_spot* _next = nullptr;
 
         friend parking_lot;
     };
@@ -77,12 +91,12 @@ namespace jobxx
         void unpark_all();
 
     private:
-        bool _link(parkable& thread);
-        void _unlink(parkable& thread);
+        void _link(parking_spot& spot, parkable& thread);
+        void _unlink(parking_spot& spot);
         
         spinlock _lock;
-        parkable* _head = nullptr;
-        parkable* _tail = nullptr;
+        parking_spot* _head = nullptr;
+        parking_spot* _tail = nullptr;
 
         friend parkable;
     };

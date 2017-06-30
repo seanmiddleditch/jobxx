@@ -44,11 +44,8 @@ void jobxx::parkable::park(parking_lot& lot, predicate pred)
     // awoken by. note that our parked state is not
     // guaranteed to still be true by the end of this
     // process, so _wait must deal with that.
-    if (!lot._link(*this))
-    {
-        _parking = false;
-        return;
-    }
+    parking_spot spot;
+    lot._link(spot, *this);
 
     // we check the predicate after parking the lot to 
     // avoid a race condition: if the predicate fails
@@ -62,7 +59,7 @@ void jobxx::parkable::park(parking_lot& lot, predicate pred)
     if (pred && pred())
     {
         _parking = false;
-        lot._unlink(*this);
+        lot._unlink(spot);
         return;
     }
 
@@ -94,44 +91,44 @@ bool jobxx::parkable::_unpark()
     return awoken;
 }
 
-bool jobxx::parking_lot::_link(parkable& thread)
+void jobxx::parking_lot::_link(parking_spot& spot, parkable& thread)
 {
     std::lock_guard<spinlock> _(_lock);
+
+    spot._thread = &thread;
 
     // this is how we know to wake the thread
     if (_tail != nullptr)
     {
-        _tail->_next = &thread;
-        _tail = &thread;
+        _tail->_next = &spot;
+        _tail = &spot;
     }
     else
     {
-        _head = _tail = &thread;
+        _head = _tail = &spot;
     }
-
-    return true;
 }
 
-void jobxx::parking_lot::_unlink(parkable& thread)
+void jobxx::parking_lot::_unlink(parking_spot& spot)
 {
     std::lock_guard<spinlock> _(_lock);
 
-    if (_head == &thread)
+    if (_head == &spot)
     {
-        _head = thread._next;
-        if (_tail == &thread)
+        _head = spot._next;
+        if (_tail == &spot)
         {
             _tail = nullptr;
         }
     }
     else if (_head != nullptr)
     {
-        for (parkable* iter = _head; iter->_next != nullptr; iter = iter->_next)
+        for (parking_spot* iter = _head; iter->_next != nullptr; iter = iter->_next)
         {
-            if (iter->_next == &thread)
+            if (iter->_next == &spot)
             {
-                iter->_next = thread._next;
-                if (_tail == &thread)
+                iter->_next = spot._next;
+                if (_tail == &spot)
                 {
                     _tail = iter;
                 }
@@ -147,19 +144,19 @@ bool jobxx::parking_lot::unpark_one()
 
     while (_head != nullptr)
     {
-        parkable* thread = _head;
+        parking_spot* const spot = _head;
         _head = _head->_next;
-        if (_tail == thread)
+        if (_tail == spot)
         {
             _tail = nullptr;
         }
 
-        thread->_next = nullptr;
+        spot->_next = nullptr;
 
         // keep looping until we awaken a thread;
         // a thread may already be unparked by another
         // thread even though it was still in our queue.
-        if (thread->_unpark())
+        if (spot->_thread->_unpark())
         {
             return true;
         }
@@ -173,13 +170,13 @@ void jobxx::parking_lot::unpark_all()
     std::lock_guard<spinlock> _(_lock);
 
     // tell all currently-parked threads to awaken
-    parkable* thread = _head;
-    while (thread != nullptr)
+    parking_spot* spot = _head;
+    while (spot != nullptr)
     {
-        parkable* next = thread->_next;
-        thread->_next = nullptr;
-        thread->_unpark();
-        thread = next;
+        parking_spot* const next = spot->_next;
+        spot->_next = nullptr;
+        spot->_thread->_unpark();
+        spot = next;
     }
     _head = _tail = nullptr;
 }
