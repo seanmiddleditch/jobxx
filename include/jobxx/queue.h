@@ -61,7 +61,6 @@ namespace jobxx
         void work_forever();
 
         void close();
-        bool closed() const;
 
     private:
         _detail::job* _create_job();

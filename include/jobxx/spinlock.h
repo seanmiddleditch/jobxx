@@ -52,8 +52,6 @@ namespace jobxx
         std::atomic<bool> _flag = false;
     };
 
-    
-
     void spinlock::lock()
     {
         for (;;)
