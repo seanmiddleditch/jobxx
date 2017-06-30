@@ -152,21 +152,3 @@ void jobxx::parking_lot::close()
     }
     _head = _tail = nullptr;
 }
-
-void jobxx::parking_lot::spinlock::lock()
-{
-    for (;;)
-    {
-        bool expected = false;
-        if (flag.compare_exchange_weak(expected, true, std::memory_order_acquire))
-        {
-            break;
-        }
-        // FIXME: backoff
-    }
-}
-
-void jobxx::parking_lot::spinlock::unlock()
-{
-    flag.store(false, std::memory_order_release);
-}

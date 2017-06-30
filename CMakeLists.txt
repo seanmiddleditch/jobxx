@@ -8,6 +8,7 @@ set(JOBXX_PUBLIC_HEADERS
     include/jobxx/context.h
     include/jobxx/delegate.h
     include/jobxx/job.h
+    include/jobxx/spinlock.h
     include/jobxx/park.h
     include/jobxx/queue.h
 )

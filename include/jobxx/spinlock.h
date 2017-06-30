@@ -28,66 +28,50 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_PARK_H)
-#define _guard_JOBXX_PARK_H
+#if !defined(_guard_JOBXX_SPINLOCK_H)
+#define _guard_JOBXX_SPINLOCK_H
 #pragma once
 
-#include "spinlock.h"
-#include <mutex>
-#include <condition_variable>
 #include <atomic>
 
 namespace jobxx
 {
 
-    class parking_lot;
-
-    class parkable
+    class spinlock
     {
     public:
-        parkable() = default;
+        spinlock() = default;
 
-        parkable(parkable const&) = delete;
-        parkable& operator=(parkable const&) = delete;
+        spinlock(spinlock const&) = delete;
+        spinlock& operator=(spinlock const&) = delete;
 
-        void park(parking_lot& lot);
+        inline void lock();
+        inline void unlock();
 
     private:
-        bool _unpark();
-
-        std::mutex _lock;
-        std::condition_variable _cond;
-        std::atomic<bool> _parking = false;
-        parkable* _next = nullptr;
-
-        friend parking_lot;
+        std::atomic<bool> _flag = false;
     };
 
-    class parking_lot
+    
+
+    void spinlock::lock()
     {
-    public:
-        parking_lot() = default;
-        ~parking_lot() { close() ;}
+        for (;;)
+        {
+            bool expected = false;
+            if (_flag.compare_exchange_weak(expected, true, std::memory_order_acquire))
+            {
+                break;
+            }
+            // FIXME: backoff
+        }
+    }
 
-        parking_lot(parking_lot const&) = delete;
-        parking_lot& operator=(parking_lot const&) = delete;
-
-        bool unpark_one();
-
-        void close();
-        bool closed() const { return _closed; }
-
-    private:
-        bool _park(parkable& thread);
-        
-        spinlock _lock;
-        parkable* _head = nullptr;
-        parkable* _tail = nullptr;
-        bool _closed = false;
-
-        friend parkable;
-    };
+    void spinlock::unlock()
+    {
+        _flag.store(false, std::memory_order_release);
+    }
 
 }
 
-#endif // defined(_guard_JOBXX_PARK_H)
+#endif // defined(_guard_JOBXX_SPINLOCK_H)
