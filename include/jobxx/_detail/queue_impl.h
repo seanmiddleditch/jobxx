@@ -50,7 +50,7 @@ namespace jobxx
         {
             void spawn_task(delegate work, _detail::job_impl* parent);
             _detail::task* pull_task();
-            void execute(_detail::task& item);
+            void execute(_detail::task* item);
 
             concurrent_queue<_detail::task*> tasks;
             parking_lot lot;

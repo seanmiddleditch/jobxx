@@ -62,11 +62,20 @@ void jobxx::queue::wait_job_actively(job const& awaited)
         // is also complete, so we do no work. the
         // multi-lot park function needs to indicate
         // which lot unparked the thread.
-        thread.park_until(_impl->lot, awaited.lot(), [this, &awaited]
+
+        _detail::task* item = nullptr;
+        thread.park_until(_impl->lot, awaited.lot(), [this, &awaited, &item]
         {
-            // FIXME: don't actually do work here, just deque the task
-            return awaited.complete() || work_one();
+            return awaited.complete() || (item = _impl->pull_task()) != nullptr;
         });
+
+        // we don't want to execute work inside the
+        // parkable condition, but we have to act
+        // on anything polled by it.
+        if (item != nullptr)
+        {
+            _impl->execute(item);
+        }
     }
 }
 
@@ -75,8 +84,7 @@ bool jobxx::queue::work_one()
     _detail::task* item = _impl->pull_task();
     if (item != nullptr)
     {
-        _impl->execute(*item);
-        delete item;
+        _impl->execute(item);
         return true;
     }
     else
@@ -101,11 +109,19 @@ void jobxx::queue::work_forever()
     {
         work_all();
 
-        thread.park_until(_impl->lot, [this]
+        _detail::task* item = nullptr;
+        thread.park_until(_impl->lot, [this, &item]
         {
-            // FIXME: don't actually do work here, just deque the task
-            return work_one() || _impl->closed.load(std::memory_order_relaxed);
+            return _impl->closed.load(std::memory_order_relaxed) || (item = _impl->pull_task()) != nullptr;
         });
+
+        // we don't want to execute work inside the
+        // parkable condition, but we have to act
+        // on anything polled by it.
+        if (item != nullptr)
+        {
+            _impl->execute(item);
+        }
     }
 }
 
@@ -172,15 +188,15 @@ jobxx::_detail::task* jobxx::_detail::queue_impl::pull_task()
     return item;
 }
 
-void jobxx::_detail::queue_impl::execute(_detail::task& item)
+void jobxx::_detail::queue_impl::execute(_detail::task* item)
 {
-    if (item.work)
+    if (item->work)
     {
-        context ctx(*this, item.parent);
-        item.work(ctx);
+        context ctx(*this, item->parent);
+        item->work(ctx);
     }
 
-    if (item.parent != nullptr)
+    if (item->parent != nullptr)
     {
         // decrement the number of outstanding
         // tasks. if this is the last task that
@@ -188,12 +204,15 @@ void jobxx::_detail::queue_impl::execute(_detail::task& item)
         // count we added when the first task was
         // added, since there are no longer any
         // tasks referencing the job.
-        if (item.parent != nullptr && 0 == --item.parent->tasks)
+        if (0 == --item->parent->tasks)
         {
-            if (0 == --item.parent->refs)
+            if (0 == --item->parent->refs)
             {
-                delete item.parent;
+                delete item->parent;
             }
         }
     }
+
+    // the task is no longer needed
+    delete item;
 }
