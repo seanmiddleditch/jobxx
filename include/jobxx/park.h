@@ -34,7 +34,6 @@
 
 #include <mutex>
 #include <condition_variable>
-#include <deque>
 #include <atomic>
 
 namespace jobxx
@@ -53,12 +52,12 @@ namespace jobxx
         void park(parking_lot& lot);
 
     private:
-        void _park();
         bool _unpark();
 
         std::mutex _lock;
         std::condition_variable _cond;
         std::atomic<bool> _parking = false;
+        parkable* _next = nullptr;
 
         friend parking_lot;
     };
@@ -80,13 +79,16 @@ namespace jobxx
     private:
         bool _park(parkable& thread);
 
-        // FIXME: consider something like an
-        // atomic linked list here to reduce
-        // contention. whatever is used requires
-        // fast insert and erase, and especially
-        // fast erase-from-start.
-        std::mutex _lock;
-        std::deque<parkable*> _queue;
+        struct spinlock
+        {
+            std::atomic<bool> flag = false;
+            void lock();
+            void unlock();
+        };
+        
+        spinlock _lock;
+        parkable* _head = nullptr;
+        parkable* _tail = nullptr;
         bool _closed = false;
 
         friend parkable;

@@ -35,7 +35,7 @@ void jobxx::parkable::park(parking_lot& lot)
 {
     // we can't be parked again if we're already parked
     bool expected = false;
-    if (!_parking.compare_exchange_strong(expected, true))
+    if (!_parking.compare_exchange_strong(expected, true, std::memory_order_acquire))
     {
         return;
     }
@@ -50,23 +50,20 @@ void jobxx::parkable::park(parking_lot& lot)
         return;
     }
 
-    _park();
-}
-
-void jobxx::parkable::_park()
-{
-    std::unique_lock<std::mutex> lock(_lock);
-    _cond.wait(lock, [&parked = _parking]()
     {
-        return !parked;
-    });
+        std::unique_lock<std::mutex> lock(_lock);
+        _cond.wait(lock, [&parked = _parking]()
+        {
+            return !parked;
+        });
+    }
 }
 
 bool jobxx::parkable::_unpark()
 {
     // signal a thread to awaken _if_ it's currently parked.
     bool expected = true;
-    bool const awoken = _parking.compare_exchange_strong(expected, false);
+    bool const awoken = _parking.compare_exchange_strong(expected, false, std::memory_order_release);
     if (awoken)
     {
         // the lock is held to avoid a race; condition_variable
@@ -86,7 +83,7 @@ bool jobxx::parkable::_unpark()
 
 bool jobxx::parking_lot::_park(parkable& thread)
 {
-    std::lock_guard<std::mutex> _(_lock);
+    std::lock_guard<spinlock> _(_lock);
 
     // if the parking lot is already closed, we cannot park
     if (_closed)
@@ -95,19 +92,33 @@ bool jobxx::parking_lot::_park(parkable& thread)
     }
 
     // this is how we know to wake the thread
-    _queue.push_back(&thread);
+    if (_tail != nullptr)
+    {
+        _tail->_next = &thread;
+        _tail = &thread;
+    }
+    else
+    {
+        _head = _tail = &thread;
+    }
 
     return true;
 }
 
 bool jobxx::parking_lot::unpark_one()
 {
-    std::lock_guard<std::mutex> _(_lock);
+    std::lock_guard<spinlock> _(_lock);
 
-    while (!_queue.empty())
+    while (_head != nullptr)
     {
-        parkable* thread = _queue.front();
-        _queue.pop_front();
+        parkable* thread = _head;
+        _head = _head->_next;
+        if (_head == nullptr)
+        {
+            _tail = nullptr;
+        }
+
+        thread->_next = nullptr;
 
         // keep looping until we awaken a thread;
         // a thread may already be unparked by another
@@ -123,7 +134,7 @@ bool jobxx::parking_lot::unpark_one()
 
 void jobxx::parking_lot::close()
 {
-    std::lock_guard<std::mutex> _(_lock);
+    std::lock_guard<spinlock> _(_lock);
 
     // we can only modify this under the lock; signals
     // that no new threds can be parked, and any
@@ -131,9 +142,31 @@ void jobxx::parking_lot::close()
     _closed = true;
 
     // tell all currently-parked threads to awaken
-    for (parkable* parked : _queue)
+    parkable* thread = _head;
+    while (thread != nullptr)
     {
-        parked->_unpark();
+        parkable* next = thread->_next;
+        thread->_next = nullptr;
+        thread->_unpark();
+        thread = next;
     }
-    _queue.clear();
+    _head = _tail = nullptr;
+}
+
+void jobxx::parking_lot::spinlock::lock()
+{
+    for (;;)
+    {
+        bool expected = false;
+        if (flag.compare_exchange_weak(expected, true, std::memory_order_acquire))
+        {
+            break;
+        }
+        // FIXME: backoff
+    }
+}
+
+void jobxx::parking_lot::spinlock::unlock()
+{
+    flag.store(false, std::memory_order_release);
 }
