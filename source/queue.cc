@@ -84,10 +84,14 @@ void jobxx::queue::work_forever()
 {
     parkable thread;
 
-    while (!_impl->parked.closed())
+    while (!_impl->closed.load(std::memory_order_relaxed))
     {
         work_all();
-        thread.park(_impl->parked);
+
+        thread.park(_impl->parked, [this]
+        {
+            return work_one() || _impl->closed.load(std::memory_order_relaxed);
+        });
     }
 }
 
@@ -97,8 +101,11 @@ void jobxx::queue::close()
     work_all();
 
     // close the parking lot, which ensures nobody is
-    // blocked on this queue
-    _impl->parked.close();
+    // blocked on this queue, by unparking all threads
+    // after we mark the queue as closed (which
+    // prevents reparking).
+    _impl->closed.store(true);
+    _impl->parked.unpark_all();
 
     // actually finish any work remaining, knowing
     // that no new work can be added to the queue
@@ -119,7 +126,7 @@ void jobxx::queue::spawn_task(delegate&& work)
 void jobxx::_detail::queue::spawn_task(delegate work, _detail::job* parent)
 {
     // we can't spawn tasks on closed queue
-    if (parked.closed())
+    if (closed.load(std::memory_order_acquire))
     {
         // FIXME: signal error in some way
         return;

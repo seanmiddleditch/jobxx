@@ -10,6 +10,7 @@ set(JOBXX_PUBLIC_HEADERS
     include/jobxx/job.h
     include/jobxx/spinlock.h
     include/jobxx/park.h
+    include/jobxx/predicate.h
     include/jobxx/queue.h
 )
 set(JOBXX_PRIVATE_HEADERS

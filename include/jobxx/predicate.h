@@ -28,65 +28,40 @@
 // Authors:
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
-#if !defined(_guard_JOBXX_PARK_H)
-#define _guard_JOBXX_PARK_H
+#if !defined(_guard_JOBXX_PREDICATE_H)
+#define _guard_JOBXX_PREDICATE_H
 #pragma once
 
-#include "spinlock.h"
-#include "predicate.h"
-#include <mutex>
-#include <condition_variable>
-#include <atomic>
+#include <utility>
 
 namespace jobxx
 {
 
-    class parking_lot;
-
-    class parkable
+    class predicate
     {
     public:
-        parkable() = default;
+        predicate() = default;
 
-        parkable(parkable const&) = delete;
-        parkable& operator=(parkable const&) = delete;
+        template <typename FunctionT> /*implicit*/ predicate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
 
-        void park(parking_lot& lot, predicate pred);
+        explicit operator bool() const { return _thunk != nullptr; }
+
+        bool operator()() { return _thunk(_view); }
 
     private:
-        bool _unpark();
+        template <typename FunctionT> inline void _assign(FunctionT&& func);
 
-        std::mutex _lock;
-        std::condition_variable _cond;
-        std::atomic<bool> _parking = false;
-        parkable* _next = nullptr;
-
-        friend parking_lot;
+        bool(*_thunk)(void*) = nullptr;
+        void* _view = nullptr;
     };
 
-    class parking_lot
+    template <typename FunctionT>
+    void predicate::_assign(FunctionT&& func)
     {
-    public:
-        parking_lot() = default;
-        ~parking_lot() { unpark_all(); }
-
-        parking_lot(parking_lot const&) = delete;
-        parking_lot& operator=(parking_lot const&) = delete;
-
-        bool unpark_one();
-        void unpark_all();
-
-    private:
-        bool _link(parkable& thread);
-        void _unlink(parkable& thread);
-        
-        spinlock _lock;
-        parkable* _head = nullptr;
-        parkable* _tail = nullptr;
-
-        friend parkable;
-    };
+        _thunk = [](void* view){ return (*static_cast<FunctionT*>(view))(); };
+        _view = &func;
+    }
 
 }
 
-#endif // defined(_guard_JOBXX_PARK_H)
+#endif // defined(_guard_JOBXX_PREDICATE_H)

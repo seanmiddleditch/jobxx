@@ -35,6 +35,7 @@
 #include "jobxx/delegate.h"
 #include "jobxx/concurrent_queue.h"
 #include "jobxx/park.h"
+#include <atomic>
 
 namespace jobxx
 {
@@ -53,6 +54,7 @@ namespace jobxx
 
             concurrent_queue<_detail::task*> tasks;
             parking_lot parked;
+            std::atomic<bool> closed = false;
         };
 
     }

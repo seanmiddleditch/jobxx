@@ -36,6 +36,7 @@
 #include <atomic>
 #include <array>
 
+// test the general queue/task/job system _without_ threads
 bool basic_test_one(jobxx::queue& queue)
 {
     int num = 0x1337c0de;
@@ -79,6 +80,7 @@ bool basic_test()
     return true;
 }
 
+// test background threads and the main thread actively working together
 bool thread_test_one()
 {
     jobxx::queue queue;
@@ -126,7 +128,54 @@ bool thread_test()
     return true;
 }
 
+// test background threads working while the main thread does not execute tasks
+bool inactive_wait_thread_test_one()
+{
+    jobxx::queue queue;
+
+    std::array<std::thread, 2> workers{
+        std::thread([&queue](){ queue.work_forever(); }),
+        std::thread([&queue](){ queue.work_forever(); })
+    };
+
+    std::atomic<int> counter = 0;
+    constexpr int target = 10000;
+    for (int i = 0; i != target; ++i)
+    {
+        queue.spawn_task([&counter](){ counter += 1; });
+    }
+
+    // do _not
+    while (counter != target)
+    {
+        std::this_thread::yield();
+    }
+
+
+    queue.close();
+    for (auto& worker : workers)
+    {
+        worker.join();
+    }
+
+    return true;
+}
+
+bool inactive_wait_thread_test()
+{
+    // execute the test 10 times in naive hopes of catching races
+    // FIXME: do this smarter
+    for (int i = 0; i < 10; ++i)
+    {
+        if (!inactive_wait_thread_test_one())
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 int main()
 {
-    return !(basic_test() && thread_test());
+    return !(basic_test() && thread_test() && inactive_wait_thread_test());
 }
