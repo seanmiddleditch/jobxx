@@ -51,14 +51,15 @@ namespace jobxx
         parkable(parkable const&) = delete;
         parkable& operator=(parkable const&) = delete;
 
-        void park(parking_lot& lot, predicate pred);
+        void park_until(parking_lot& lot, predicate pred);
+        void park_until(parking_lot& lot, parking_lot& lot2, predicate pred);
 
     private:
         bool _unpark();
 
         std::mutex _lock;
         std::condition_variable _cond;
-        std::atomic<bool> _parking = false;
+        std::atomic<bool> _parked = false;
 
         friend parking_lot;
     };

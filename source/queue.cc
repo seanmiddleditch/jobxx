@@ -45,15 +45,28 @@ jobxx::queue::~queue()
 
 void jobxx::queue::wait_job_actively(job const& awaited)
 {
+    if (awaited.complete())
+    {
+        return;
+    }
+
+    // FIXME: make this TLS ?
+    parkable thread;
+
     while (!awaited.complete())
     {
-        if (!work_one())
+        work_one();
+
+        // FIXME: potential problem if we are
+        // awoken and expected to work but the job
+        // is also complete, so we do no work. the
+        // multi-lot park function needs to indicate
+        // which lot unparked the thread.
+        thread.park_until(_impl->parked, awaited.lot(), [this, &awaited]
         {
-            // FIXME: park if work_one has no work, but only
-            //  when we support parking on both a queue and a
-            //  job. until then, back-off may be appropriate.
-            std::this_thread::yield();
-        }
+            // FIXME: don't actually do work here, just deque the task
+            return awaited.complete() || work_one();
+        });
     }
 }
 
@@ -88,8 +101,9 @@ void jobxx::queue::work_forever()
     {
         work_all();
 
-        thread.park(_impl->parked, [this]
+        thread.park_until(_impl->parked, [this]
         {
+            // FIXME: don't actually do work here, just deque the task
             return work_one() || _impl->closed.load(std::memory_order_relaxed);
         });
     }

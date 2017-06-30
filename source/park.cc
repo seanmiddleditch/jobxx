@@ -31,11 +31,11 @@
 
 #include "jobxx/park.h"
 
-void jobxx::parkable::park(parking_lot& lot, predicate pred)
+void jobxx::parkable::park_until(parking_lot& lot, predicate pred)
 {
     // we can't be parked again if we're already parked
     bool expected = false;
-    if (!_parking.compare_exchange_strong(expected, true, std::memory_order_acquire))
+    if (!_parked.compare_exchange_strong(expected, true, std::memory_order_acquire))
     {
         return;
     }
@@ -58,22 +58,70 @@ void jobxx::parkable::park(parking_lot& lot, predicate pred)
     // the parked flag is unset).
     if (pred && pred())
     {
-        _parking = false;
+        _parked = false;
         lot._unlink(spot);
         return;
     }
 
     {
         std::unique_lock<std::mutex> lock(_lock);
-        _cond.wait(lock, [this](){ return !_parking.load(); });
+        _cond.wait(lock, [this](){ return !_parked.load(); });
     }
+}
+
+void jobxx::parkable::park_until(parking_lot& lot, parking_lot& lot2, predicate pred)
+{
+    // we can't be parked again if we're already parked
+    bool expected = false;
+    if (!_parked.compare_exchange_strong(expected, true, std::memory_order_acquire))
+    {
+        return;
+    }
+
+    // link into the parking lot(s) that we want to be
+    // awoken by. note that our parked state is not
+    // guaranteed to still be true by the end of this
+    // process, so _wait must deal with that.
+    parking_spot spot;
+    lot._link(spot, *this);
+
+    parking_spot spot2;
+    lot2._link(spot2, *this);
+
+    // we check the predicate after parking the lot to 
+    // avoid a race condition: if the predicate fails
+    // for any reason, those reasons must result in an
+    // eventual call to to unpark_one/unpark_all on the
+    // lot, so we check the predicate after parking in
+    // the lot but before sleeping. if the condition is
+    // triggered after parking but before the sleep,
+    // we'll be unparked (and the sleep will fail because
+    // the parked flag is unset).
+    if (pred && pred())
+    {
+        _parked = false;
+        lot._unlink(spot);
+        lot2._unlink(spot2);
+        return;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(_lock);
+        _cond.wait(lock, [this](){ return !_parked.load(); });
+    }
+
+    // unlink from both lot, because we very possibly were only
+    // unlinked by one of them, and we can't leave either with a
+    // dangling reference to a parking_spot.
+    lot._unlink(spot);
+    lot2._unlink(spot2);
 }
 
 bool jobxx::parkable::_unpark()
 {
     // signal a thread to awaken _if_ it's currently parked.
     bool expected = true;
-    bool const awoken = _parking.compare_exchange_strong(expected, false, std::memory_order_release);
+    bool const awoken = _parked.compare_exchange_strong(expected, false, std::memory_order_release);
     if (awoken)
     {
         // the lock is held to avoid a race; condition_variable

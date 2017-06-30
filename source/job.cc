@@ -65,3 +65,8 @@ bool jobxx::job::complete() const
 {
     return _impl == nullptr || _impl->tasks == 0;
 }
+
+auto jobxx::job::lot() const -> parking_lot&
+{
+    return _impl->lot;
+}

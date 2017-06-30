@@ -36,6 +36,7 @@ namespace jobxx
 {
 
     namespace _detail { struct job; }
+    class parking_lot;
 
     class job
     {
@@ -51,6 +52,9 @@ namespace jobxx
 
         bool complete() const;
         explicit operator bool() const { return complete(); }
+
+        // FIXME: this should not be public API
+        parking_lot& lot() const;
 
     private:
         _detail::job* _impl = nullptr;

@@ -94,13 +94,15 @@ namespace jobxx
     template <typename FunctionT>
     void delegate::_assign(FunctionT&& func)
     {
-        static_assert(sizeof(FunctionT) <= max_size, "function too large for jobxx::delegate");
-        static_assert(alignof(FunctionT) <= max_alignment, "function over-aligned for jobxx::delegate");
-        static_assert(std::is_trivially_move_constructible_v<FunctionT>, "function not a trivially move-constructible as required by jobxx::delegate");
-        static_assert(std::is_trivially_destructible_v<FunctionT>, "function not a trivially destructible as required by jobxx::delegate");
+        using func_type = std::remove_reference_t<FunctionT>;
 
-        _thunk = &_invoke<FunctionT>;
-        new (&_storage) FunctionT(std::forward<FunctionT>(func));
+        static_assert(sizeof(func_type) <= max_size, "function too large for jobxx::delegate");
+        static_assert(alignof(func_type) <= max_alignment, "function over-aligned for jobxx::delegate");
+        static_assert(std::is_trivially_move_constructible_v<func_type>, "function not a trivially move-constructible as required by jobxx::delegate");
+        static_assert(std::is_trivially_destructible_v<func_type>, "function not a trivially destructible as required by jobxx::delegate");
+
+        _thunk = &_invoke<func_type>;
+        new (&_storage) func_type(std::forward<FunctionT>(func));
     }
 
 }

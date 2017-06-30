@@ -32,6 +32,7 @@
 #define _guard_JOBXX_DETAIL_JOB_H
 #pragma once
 
+#include "jobxx/park.h"
 #include <atomic>
 
 namespace jobxx
@@ -43,6 +44,7 @@ namespace jobxx
         {
             std::atomic<int> refs = 1;
             std::atomic<int> tasks = 0;
+            parking_lot lot;
         };
 
     }    
