@@ -50,7 +50,7 @@ void jobxx::parkable::park_until(parking_lot& lot, predicate pred)
     // awoken by. note that our parked state is not
     // guaranteed to still be true by the end of this
     // process, so _wait must deal with that.
-    parking_spot spot;
+    parking_lot::node spot;
     lot._link(spot, *this);
 
     // we check the predicate after parking the lot to 
@@ -88,10 +88,10 @@ void jobxx::parkable::park_until(parking_lot& lot, parking_lot& lot2, predicate 
     // awoken by. note that our parked state is not
     // guaranteed to still be true by the end of this
     // process, so _wait must deal with that.
-    parking_spot spot;
+    parking_lot::node spot;
     lot._link(spot, *this);
 
-    parking_spot spot2;
+    parking_lot::node spot2;
     lot2._link(spot2, *this);
 
     // we check the predicate after parking the lot to 
@@ -118,7 +118,7 @@ void jobxx::parkable::park_until(parking_lot& lot, parking_lot& lot2, predicate 
 
     // unlink from both lot, because we very possibly were only
     // unlinked by one of them, and we can't leave either with a
-    // dangling reference to a parking_spot.
+    // dangling reference to a node.
     lot._unlink(spot);
     lot2._unlink(spot2);
 }
@@ -143,7 +143,7 @@ bool jobxx::parkable::_unpark()
     return awoken;
 }
 
-void jobxx::parking_lot::_link(parking_spot& spot, parkable& thread)
+void jobxx::parking_lot::_link(node& spot, parkable& thread)
 {
     std::lock_guard<spinlock> _(_lock);
 
@@ -154,7 +154,7 @@ void jobxx::parking_lot::_link(parking_spot& spot, parkable& thread)
     _parked._prev = &spot;
 }
 
-void jobxx::parking_lot::_unlink(parking_spot& spot)
+void jobxx::parking_lot::_unlink(node& spot)
 {
     std::lock_guard<spinlock> _(_lock);
 
@@ -168,7 +168,7 @@ bool jobxx::parking_lot::unpark_one()
 
     while (_parked._next != &_parked)
     {
-        parking_spot* const spot = _parked._next;
+        node* const spot = _parked._next;
         _parked._next = _parked._next->_next;
         _parked._next->_prev = &_parked;
 
@@ -191,10 +191,10 @@ void jobxx::parking_lot::unpark_all()
     std::lock_guard<spinlock> _(_lock);
 
     // tell all currently-parked threads to awaken
-    parking_spot* spot = _parked._next;
+    node* spot = _parked._next;
     while (spot != &_parked)
     {
-        parking_spot* const next = spot->_next;
+        node* const next = spot->_next;
         spot->_prev = spot->_next = spot;
         spot->_thread->_unpark();
         spot = next;

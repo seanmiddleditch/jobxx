@@ -68,22 +68,6 @@ namespace jobxx
         friend parking_lot;
     };
 
-    class parking_spot
-    {
-    public:
-        parking_spot() = default;
-
-        parking_spot(parking_spot const&) = delete;
-        parking_spot& operator=(parking_spot const&) = delete;
-
-    private:
-        parkable* _thread = nullptr;
-        parking_spot* _next = this;
-        parking_spot* _prev = this;
-
-        friend parking_lot;
-    };
-
     class parking_lot
     {
     public:
@@ -97,11 +81,18 @@ namespace jobxx
         void unpark_all();
 
     private:
-        void _link(parking_spot& spot, parkable& thread);
-        void _unlink(parking_spot& spot);
+        struct node
+        {
+            parkable* _thread = nullptr;
+            node* _next = this;
+            node* _prev = this;
+        };
+
+        void _link(node& spot, parkable& thread);
+        void _unlink(node& spot);
         
         spinlock _lock;
-        parking_spot _parked;
+        node _parked;
 
         friend parkable;
     };
