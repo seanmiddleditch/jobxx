@@ -31,6 +31,12 @@
 
 #include "jobxx/park.h"
 
+auto jobxx::parkable::thid_thread() -> parkable&
+{
+    static thread_local parkable thread;
+    return thread;
+}
+
 void jobxx::parkable::park_until(parking_lot& lot, predicate pred)
 {
     // we can't be parked again if we're already parked

@@ -35,6 +35,8 @@
 #include "jobxx/_detail/queue_impl.h"
 #include "jobxx/_detail/task.h"
 
+static thread_local jobxx::parkable tl_parkable;
+
 jobxx::queue::queue() : _impl(new _detail::queue_impl) {}
 
 jobxx::queue::~queue()
@@ -50,8 +52,7 @@ void jobxx::queue::wait_job_actively(job const& awaited)
         return;
     }
 
-    // FIXME: make this TLS ?
-    parkable thread;
+    parkable& thread = parkable::thid_thread();
 
     while (!awaited.complete())
     {
@@ -103,7 +104,7 @@ void jobxx::queue::work_all()
 
 void jobxx::queue::work_forever()
 {
-    parkable thread;
+    parkable& thread = parkable::thid_thread();
 
     while (!_impl->closed.load(std::memory_order_relaxed))
     {
