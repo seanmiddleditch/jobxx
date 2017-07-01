@@ -42,7 +42,8 @@ namespace jobxx
     public:
         predicate() = default;
 
-        template <typename FunctionT> /*implicit*/ predicate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
+        template <typename FunctionT, typename = std::enable_if_t<!std::is_same_v<std::remove_const_t<std::remove_reference_t<FunctionT>>, predicate>>>
+        /*implicit*/ predicate(FunctionT&& func) { _assign(std::forward<FunctionT>(func)); }
 
         explicit operator bool() const { return _thunk != nullptr; }
 
@@ -58,7 +59,8 @@ namespace jobxx
     template <typename FunctionT>
     void predicate::_assign(FunctionT&& func)
     {
-        _thunk = [](void* view){ return (*static_cast<FunctionT*>(view))(); };
+        using func_type = std::remove_reference_t<FunctionT>;
+        _thunk = [](void* view){ return (*static_cast<func_type*>(view))(); };
         _view = &func;
     }
 
