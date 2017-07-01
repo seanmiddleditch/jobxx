@@ -38,38 +38,36 @@
 namespace jobxx
 {
 
-    class parking_lot
+    class park
     {
     public:
-        parking_lot() = default;
-        ~parking_lot() { unpark_all(); }
+        park() = default;
+        ~park() { unpark_all(); }
 
-        parking_lot(parking_lot const&) = delete;
-        parking_lot& operator=(parking_lot const&) = delete;
+        park(park const&) = delete;
+        park& operator=(park const&) = delete;
 
         void park_until(predicate pred) { park_until(nullptr, pred); }
-        void park_until(parking_lot* other_lot, predicate pred);
+        void park_until(park* other, predicate pred);
 
         bool unpark_one();
         void unpark_all();
 
     private:
-        struct parkable;
-        struct node
+        struct thread_state;
+        struct parked_node
         {
-            parkable* _thread = nullptr;
-            node* _next = this;
-            node* _prev = this;
+            thread_state* _thread = nullptr;
+            parked_node* _next = this;
+            parked_node* _prev = this;
         };
 
-        bool _unpark(parkable& thread);
-        void _link(node& spot, parkable& thread);
-        void _unlink(node& spot);
+        bool _unpark(thread_state& thread);
+        void _link(parked_node& node);
+        void _unlink(parked_node& node);
         
         spinlock _lock;
-        node _parked;
-
-        friend parkable;
+        parked_node _parked;
     };
 
 }

@@ -44,7 +44,7 @@ namespace jobxx
         {
             std::atomic<int> refs = 1;
             std::atomic<int> tasks = 0;
-            parking_lot lot;
+            park waiting;
         };
 
     }    

@@ -56,12 +56,11 @@ void jobxx::queue::wait_job_actively(job const& awaited)
 
         // FIXME: potential problem if we are
         // awoken and expected to work but the job
-        // is also complete, so we do no work. the
-        // multi-lot park function needs to indicate
-        // which lot unparked the thread.
+        // is also complete, so we do no work. park_until
+        // needs to indicate which park awoke the thread.
 
         _detail::task* item = nullptr;
-        _impl->lot.park_until(&awaited._impl->lot, [this, &awaited, &item]
+        _impl->waiting.park_until(&awaited._impl->waiting, [this, &awaited, &item]
         {
             return awaited.complete() || (item = _impl->pull_task()) != nullptr;
         });
@@ -105,7 +104,7 @@ void jobxx::queue::work_forever()
         work_all();
 
         _detail::task* item = nullptr;
-        _impl->lot.park_until([this, &item]
+        _impl->waiting.park_until([this, &item]
         {
             return _impl->closed.load(std::memory_order_relaxed) || (item = _impl->pull_task()) != nullptr;
         });
@@ -125,16 +124,16 @@ void jobxx::queue::close()
     // before closing _try_ to empty the task queue
     work_all();
 
-    // close the parking lot, which ensures nobody is
+    // close the park, which ensures nobody is
     // blocked on this queue, by unparking all threads
     // after we mark the queue as closed (which
     // prevents reparking).
     _impl->closed.store(true);
-    _impl->lot.unpark_all();
+    _impl->waiting.unpark_all();
 
     // actually finish any work remaining, knowing
     // that no new work can be added to the queue
-    // after closing the lot.
+    // after closing the park.
     work_all();
 }
 
@@ -178,7 +177,7 @@ auto jobxx::_detail::queue_impl::spawn_task(delegate work, _detail::job_impl* pa
 
     _detail::task* item = new _detail::task{std::move(work), parent};
     tasks.push_back(item);
-    lot.unpark_one();
+    waiting.unpark_one();
 
     return spawn_result::success;
 }
@@ -209,7 +208,7 @@ void jobxx::_detail::queue_impl::execute(_detail::task* item)
         if (0 == --item->parent->tasks)
         {
             // awaken any parked threads awaiting the job
-            item->parent->lot.unpark_all();
+            item->parent->waiting.unpark_all();
 
             if (0 == --item->parent->refs)
             {
