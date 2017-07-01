@@ -68,11 +68,9 @@ namespace
         std::vector<std::thread> _threads;
     };
 
-    static bool execute(bool(*test)())
+    static bool execute(bool(*test)(), int times = 1)
     {
-        // execute the test 10 times in naive hopes of catching races
-        // FIXME: do this smarter
-        for (int i = 0; i < 10; ++i)
+        for (int i = 0; i < times; ++i)
         {
             if (!test())
             {
@@ -153,14 +151,41 @@ namespace
         worker_pool pool(4);
 
         std::atomic<int> counter = 0;
-        constexpr int target = 10000;
-        spawn_n(pool.queue(), target, [&counter](){ counter += 1; });
+        constexpr int target = 16;
+        spawn_n(pool.queue(), target, [&counter]()
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            counter += 1;
+        });
 
         // do _not_ wait actively here
         while (counter != target)
         {
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
+
+        return true;
+    }
+
+    static bool multi_queue_job_test()
+    {
+        worker_pool pool(2);
+
+        std::atomic<int> counter = 0;
+        constexpr int target = 16;
+
+        jobxx::job job = pool.queue().create_job([&counter, &pool, target](auto& ctx)
+        {
+            spawn_n(ctx, target, [&counter]()
+            {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                counter += 1;
+            });
+        });
+
+        // wait for the job on a queue that will never run work for it
+        jobxx::queue queue;
+        queue.wait_job_actively(job);
 
         return true;
     }
@@ -170,8 +195,9 @@ namespace
 int main()
 {
     return !(
-        execute(&basic_test) &&
+        execute(&basic_test, 10) &&
         execute(&thread_test) &&
-        execute(&inactive_wait_thread_test)
+        execute(&inactive_wait_thread_test) &&
+        execute(&multi_queue_job_test)
     );
 }
