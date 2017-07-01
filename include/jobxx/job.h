@@ -36,7 +36,7 @@ namespace jobxx
 {
 
     namespace _detail { struct job_impl; }
-    class parking_lot;
+    class queue;
 
     class job
     {
@@ -53,11 +53,10 @@ namespace jobxx
         bool complete() const;
         explicit operator bool() const { return complete(); }
 
-        // FIXME: this should not be public API
-        parking_lot& lot() const;
-
     private:
         _detail::job_impl* _impl = nullptr;
+
+        friend queue;
     };
     
 }

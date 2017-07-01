@@ -65,7 +65,7 @@ void jobxx::queue::wait_job_actively(job const& awaited)
         // which lot unparked the thread.
 
         _detail::task* item = nullptr;
-        thread.park_until(_impl->lot, &awaited.lot(), [this, &awaited, &item]
+        thread.park_until(_impl->lot, &awaited._impl->lot, [this, &awaited, &item]
         {
             return awaited.complete() || (item = _impl->pull_task()) != nullptr;
         });
