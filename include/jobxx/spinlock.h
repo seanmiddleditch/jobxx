@@ -56,12 +56,24 @@ namespace jobxx
     {
         for (;;)
         {
-            bool expected = false;
-            if (_flag.compare_exchange_weak(expected, true, std::memory_order_acquire))
+            // spin waiting for the lock to be free. this spin is avoiding
+            // invalidating the cacheline (since it's only reading).
+            int spins = 0;
+            while (_flag.load(std::memory_order_relaxed) == true)
             {
+                // there aren't any standard C++ ways to briefly relax the
+                // CPU (e.g. Intel's RELAX instruction _mm_pause()) and I'm
+                // not yet ready to start the CPU-specific optimizations.
+            }
+
+            // the lock is unlocked, so now we try to acquire it. another
+            // thread may have already acquired it, though, so there's a
+            // chance this will fail, and we'll need to spin more.
+            if (_flag.exchange(true, std::memory_order_acquire) == /*old-value*/false)
+            {
+                // lock acquired
                 break;
             }
-            // FIXME: backoff
         }
     }
 
