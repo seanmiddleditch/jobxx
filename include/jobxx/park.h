@@ -34,39 +34,9 @@
 
 #include "spinlock.h"
 #include "predicate.h"
-#include <mutex>
-#include <condition_variable>
-#include <atomic>
 
 namespace jobxx
 {
-
-    class parking_lot;
-
-    class parkable
-    {
-    public:
-        parkable() = default;
-
-        parkable(parkable const&) = delete;
-        parkable& operator=(parkable const&) = delete;
-
-        static parkable& this_thread();
-
-        void park_until(parking_lot& lot, predicate pred) { park_until(lot, nullptr, pred); }
-        void park_until(parking_lot& lot, parking_lot* lot2, predicate pred);
-
-    private:
-        bool _unpark();
-
-        // FIXME: we can make this more efficient on some platforms.
-        // Linux, Win8+, etc. can sleep on the atomic's value/address (futexes).
-        std::mutex _lock;
-        std::condition_variable _cond;
-        std::atomic<bool> _parked = false;
-
-        friend parking_lot;
-    };
 
     class parking_lot
     {
@@ -77,10 +47,14 @@ namespace jobxx
         parking_lot(parking_lot const&) = delete;
         parking_lot& operator=(parking_lot const&) = delete;
 
+        void park_until(predicate pred) { park_until(nullptr, pred); }
+        void park_until(parking_lot* other_lot, predicate pred);
+
         bool unpark_one();
         void unpark_all();
 
     private:
+        struct parkable;
         struct node
         {
             parkable* _thread = nullptr;
@@ -88,6 +62,7 @@ namespace jobxx
             node* _prev = this;
         };
 
+        bool _unpark(parkable& thread);
         void _link(node& spot, parkable& thread);
         void _unlink(node& spot);
         

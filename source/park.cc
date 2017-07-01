@@ -30,18 +30,31 @@
 //   Sean Middleditch <sean.middleditch@gmail.com>
 
 #include "jobxx/park.h"
+#include <mutex>
+#include <condition_variable>
 
-auto jobxx::parkable::this_thread() -> parkable&
+struct jobxx::parking_lot::parkable
 {
-    static thread_local parkable thread;
-    return thread;
-}
+    parkable() = default;
 
-void jobxx::parkable::park_until(parking_lot& lot, parking_lot* lot2, predicate pred)
+    parkable(parkable const&) = delete;
+    parkable& operator=(parkable const&) = delete;
+
+    // FIXME: we can make this more efficient on some platforms.
+    // Linux, Win8+, etc. can sleep on the atomic's value/address (futexes).
+    std::mutex _lock;
+    std::condition_variable _cond;
+    std::atomic<bool> _parked = false;
+};
+
+void jobxx::parking_lot::park_until(parking_lot* other_lot, predicate pred)
 {
+    thread_local parkable local_thread;
+    parkable& thread = local_thread; // can't capture thread_local variables in lambdas
+
     // we can't be parked again if we're already parked
     bool expected = false;
-    if (!_parked.compare_exchange_strong(expected, true, std::memory_order_acquire))
+    if (!thread._parked.compare_exchange_strong(expected, true, std::memory_order_acquire))
     {
         return;
     }
@@ -50,13 +63,13 @@ void jobxx::parkable::park_until(parking_lot& lot, parking_lot* lot2, predicate 
     // awoken by. note that our parked state is not
     // guaranteed to still be true by the end of this
     // process, so _wait must deal with that.
-    parking_lot::node spot;
-    lot._link(spot, *this);
+    node spot;
+    _link(spot, thread);
 
     parking_lot::node spot2;
-    if (lot2 != nullptr)
+    if (other_lot != nullptr)
     {
-        lot2->_link(spot2, *this);
+        other_lot->_link(spot2, thread);
     }
 
     // we check the predicate after parking the lot to 
@@ -70,29 +83,69 @@ void jobxx::parkable::park_until(parking_lot& lot, parking_lot* lot2, predicate 
     // the parked flag is unset).
     if (pred && pred())
     {
-        _parked = false;
+        thread._parked = false;
     }
     else
     {
-        std::unique_lock<std::mutex> lock(_lock);
-        _cond.wait(lock, [this](){ return !_parked.load(); });
+        std::unique_lock<std::mutex> lock(thread._lock);
+        thread._cond.wait(lock, [&thread](){ return !thread._parked.load(); });
     }
 
     // unlink from both lot, because we very possibly were only
     // unlinked by one of them, and we can't leave either with a
     // dangling reference to a node.
-    lot._unlink(spot);
-    if (lot2 != nullptr)
+    _unlink(spot);
+    if (other_lot != nullptr)
     {
-        lot2->_unlink(spot2);
+        other_lot->_unlink(spot2);
     }
 }
 
-bool jobxx::parkable::_unpark()
+bool jobxx::parking_lot::unpark_one()
+{
+    std::lock_guard<spinlock> _(_lock);
+
+    while (_parked._next != &_parked)
+    {
+        node* const spot = _parked._next;
+        _parked._next = _parked._next->_next;
+        _parked._next->_prev = &_parked;
+
+        spot->_prev = spot->_next = spot;
+
+        // keep looping until we awaken a thread;
+        // a thread may already be unparked by another
+        // thread even though it was still in our queue.
+        if (_unpark(*spot->_thread))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void jobxx::parking_lot::unpark_all()
+{
+    std::lock_guard<spinlock> _(_lock);
+
+    // tell all currently-parked threads to awaken
+    node* spot = _parked._next;
+    while (spot != &_parked)
+    {
+        node* const next = spot->_next;
+        spot->_prev = spot->_next = spot;
+        _unpark(*spot->_thread);
+        spot = next;
+    }
+    _parked._prev = _parked._next = &_parked;
+}
+
+bool jobxx::parking_lot::_unpark(parkable& thread)
 {
     // signal a thread to awaken _if_ it's currently parked.
     bool expected = true;
-    bool const awoken = _parked.compare_exchange_strong(expected, false, std::memory_order_release);
+    bool const awoken = thread._parked.compare_exchange_strong(expected, false, std::memory_order_release);
     if (awoken)
     {
         // the lock is held to avoid a race; condition_variable
@@ -102,8 +155,8 @@ bool jobxx::parkable::_unpark()
         // querying its condition at the time we signal it, and
         // that it either hasn't queried yet or that it's for-sure
         // blocking and waiting for the notify.
-        std::lock_guard<std::mutex> _(_lock);
-        _cond.notify_one();
+        std::lock_guard<std::mutex> _(thread._lock);
+        thread._cond.notify_one();
     }
     return awoken;
 }
@@ -125,44 +178,4 @@ void jobxx::parking_lot::_unlink(node& spot)
 
     spot._next->_prev = spot._prev;
     spot._prev->_next = spot._next;
-}
-
-bool jobxx::parking_lot::unpark_one()
-{
-    std::lock_guard<spinlock> _(_lock);
-
-    while (_parked._next != &_parked)
-    {
-        node* const spot = _parked._next;
-        _parked._next = _parked._next->_next;
-        _parked._next->_prev = &_parked;
-
-        spot->_prev = spot->_next = spot;
-
-        // keep looping until we awaken a thread;
-        // a thread may already be unparked by another
-        // thread even though it was still in our queue.
-        if (spot->_thread->_unpark())
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void jobxx::parking_lot::unpark_all()
-{
-    std::lock_guard<spinlock> _(_lock);
-
-    // tell all currently-parked threads to awaken
-    node* spot = _parked._next;
-    while (spot != &_parked)
-    {
-        node* const next = spot->_next;
-        spot->_prev = spot->_next = spot;
-        spot->_thread->_unpark();
-        spot = next;
-    }
-    _parked._prev = _parked._next = &_parked;
 }

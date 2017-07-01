@@ -35,8 +35,6 @@
 #include "jobxx/_detail/queue_impl.h"
 #include "jobxx/_detail/task.h"
 
-static thread_local jobxx::parkable tl_parkable;
-
 jobxx::queue::queue() : _impl(new _detail::queue_impl) {}
 
 jobxx::queue::~queue()
@@ -52,8 +50,6 @@ void jobxx::queue::wait_job_actively(job const& awaited)
         return;
     }
 
-    parkable& thread = parkable::this_thread();
-
     while (!awaited.complete())
     {
         work_one();
@@ -65,7 +61,7 @@ void jobxx::queue::wait_job_actively(job const& awaited)
         // which lot unparked the thread.
 
         _detail::task* item = nullptr;
-        thread.park_until(_impl->lot, &awaited._impl->lot, [this, &awaited, &item]
+        _impl->lot.park_until(&awaited._impl->lot, [this, &awaited, &item]
         {
             return awaited.complete() || (item = _impl->pull_task()) != nullptr;
         });
@@ -104,14 +100,12 @@ void jobxx::queue::work_all()
 
 void jobxx::queue::work_forever()
 {
-    parkable& thread = parkable::this_thread();
-
     while (!_impl->closed.load(std::memory_order_relaxed))
     {
         work_all();
 
         _detail::task* item = nullptr;
-        thread.park_until(_impl->lot, [this, &item]
+        _impl->lot.park_until([this, &item]
         {
             return _impl->closed.load(std::memory_order_relaxed) || (item = _impl->pull_task()) != nullptr;
         });
