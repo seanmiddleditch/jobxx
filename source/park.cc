@@ -31,7 +31,7 @@
 
 #include "jobxx/park.h"
 
-auto jobxx::parkable::thid_thread() -> parkable&
+auto jobxx::parkable::this_thread() -> parkable&
 {
     static thread_local parkable thread;
     return thread;

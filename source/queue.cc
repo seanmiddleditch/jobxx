@@ -52,7 +52,7 @@ void jobxx::queue::wait_job_actively(job const& awaited)
         return;
     }
 
-    parkable& thread = parkable::thid_thread();
+    parkable& thread = parkable::this_thread();
 
     while (!awaited.complete())
     {
@@ -104,7 +104,7 @@ void jobxx::queue::work_all()
 
 void jobxx::queue::work_forever()
 {
-    parkable& thread = parkable::thid_thread();
+    parkable& thread = parkable::this_thread();
 
     while (!_impl->closed.load(std::memory_order_relaxed))
     {
