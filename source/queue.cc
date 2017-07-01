@@ -214,6 +214,9 @@ void jobxx::_detail::queue_impl::execute(_detail::task* item)
         // tasks referencing the job.
         if (0 == --item->parent->tasks)
         {
+            // awaken any parked threads awaiting the job
+            item->parent->lot.unpark_all();
+
             if (0 == --item->parent->refs)
             {
                 delete item->parent;
