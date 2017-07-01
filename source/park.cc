@@ -37,45 +37,7 @@ auto jobxx::parkable::this_thread() -> parkable&
     return thread;
 }
 
-void jobxx::parkable::park_until(parking_lot& lot, predicate pred)
-{
-    // we can't be parked again if we're already parked
-    bool expected = false;
-    if (!_parked.compare_exchange_strong(expected, true, std::memory_order_acquire))
-    {
-        return;
-    }
-
-    // link into the parking lot(s) that we want to be
-    // awoken by. note that our parked state is not
-    // guaranteed to still be true by the end of this
-    // process, so _wait must deal with that.
-    parking_lot::node spot;
-    lot._link(spot, *this);
-
-    // we check the predicate after parking the lot to 
-    // avoid a race condition: if the predicate fails
-    // for any reason, those reasons must result in an
-    // eventual call to to unpark_one/unpark_all on the
-    // lot, so we check the predicate after parking in
-    // the lot but before sleeping. if the condition is
-    // triggered after parking but before the sleep,
-    // we'll be unparked (and the sleep will fail because
-    // the parked flag is unset).
-    if (pred && pred())
-    {
-        _parked = false;
-        lot._unlink(spot);
-        return;
-    }
-
-    {
-        std::unique_lock<std::mutex> lock(_lock);
-        _cond.wait(lock, [this](){ return !_parked.load(); });
-    }
-}
-
-void jobxx::parkable::park_until(parking_lot& lot, parking_lot& lot2, predicate pred)
+void jobxx::parkable::park_until(parking_lot& lot, parking_lot* lot2, predicate pred)
 {
     // we can't be parked again if we're already parked
     bool expected = false;
@@ -92,7 +54,10 @@ void jobxx::parkable::park_until(parking_lot& lot, parking_lot& lot2, predicate 
     lot._link(spot, *this);
 
     parking_lot::node spot2;
-    lot2._link(spot2, *this);
+    if (lot2 != nullptr)
+    {
+        lot2->_link(spot2, *this);
+    }
 
     // we check the predicate after parking the lot to 
     // avoid a race condition: if the predicate fails
@@ -106,11 +71,8 @@ void jobxx::parkable::park_until(parking_lot& lot, parking_lot& lot2, predicate 
     if (pred && pred())
     {
         _parked = false;
-        lot._unlink(spot);
-        lot2._unlink(spot2);
-        return;
     }
-
+    else
     {
         std::unique_lock<std::mutex> lock(_lock);
         _cond.wait(lock, [this](){ return !_parked.load(); });
@@ -120,7 +82,10 @@ void jobxx::parkable::park_until(parking_lot& lot, parking_lot& lot2, predicate 
     // unlinked by one of them, and we can't leave either with a
     // dangling reference to a node.
     lot._unlink(spot);
-    lot2._unlink(spot2);
+    if (lot2 != nullptr)
+    {
+        lot2->_unlink(spot2);
+    }
 }
 
 bool jobxx::parkable::_unpark()

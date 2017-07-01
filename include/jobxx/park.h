@@ -53,8 +53,8 @@ namespace jobxx
 
         static parkable& this_thread();
 
-        void park_until(parking_lot& lot, predicate pred);
-        void park_until(parking_lot& lot, parking_lot& lot2, predicate pred);
+        void park_until(parking_lot& lot, predicate pred) { park_until(lot, nullptr, pred); }
+        void park_until(parking_lot& lot, parking_lot* lot2, predicate pred);
 
     private:
         bool _unpark();
