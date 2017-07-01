@@ -102,7 +102,6 @@ namespace jobxx
         
         spinlock _lock;
         parking_spot _parked;
-        parking_spot* _tail = nullptr;
 
         friend parkable;
     };
