@@ -61,7 +61,7 @@ namespace jobxx
             int spins = 0;
             while (_flag.load(std::memory_order_relaxed) == true)
             {
-                // there aren't any standard C++ ways to briefly relax the
+                // FIXME: there aren't any standard C++ ways to briefly relax the
                 // CPU (e.g. Intel's RELAX instruction _mm_pause()) and I'm
                 // not yet ready to start the CPU-specific optimizations.
             }
