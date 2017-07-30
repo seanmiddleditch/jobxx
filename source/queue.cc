@@ -54,10 +54,14 @@ void jobxx::queue::wait_job_actively(job const& awaited)
     {
         work_one();
 
-        // FIXME: potential problem if we are
-        // awoken and expected to work but the job
-        // is also complete, so we do no work. park_until
-        // needs to indicate which park awoke the thread.
+        // FIXME: race condition present.
+        // after parking and before sleeping, both the awaited job may complete
+        // and the task queue may become non-empty. the task queue may then attempt
+        // to unpark this thread expecting it to do work. however, as the job
+        // is complete, we may not see the available task, and not execute it; no
+        // other thread will be unparked even were one available.
+        // if we knew who definitively caused us to awaken we could know for sure
+        // if we need to execute a task or awaken a different thread.
 
         _detail::task* item = nullptr;
         _impl->waiting.park_until(&awaited._impl->waiting, [this, &awaited, &item]
