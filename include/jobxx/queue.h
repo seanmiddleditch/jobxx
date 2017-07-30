@@ -82,7 +82,7 @@ namespace jobxx
         _detail::job_impl* job_impl = _create_job();
         context ctx(*_impl, job_impl);
         initializer(ctx);
-        return job(*job_impl);
+        return job(job_impl);
     }
 
 }

@@ -45,7 +45,7 @@ namespace jobxx
         ~job();
 
         // note this does not increment refs!
-        explicit job(_detail::job_impl& impl) : _impl(&impl) {}
+        explicit job(_detail::job_impl* impl) : _impl(impl) {}
 
         job(job&& rhs) : _impl(rhs._impl) { rhs._impl = nullptr; }
         job& operator=(job&& rhs);
