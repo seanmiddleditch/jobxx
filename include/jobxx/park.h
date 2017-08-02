@@ -38,6 +38,13 @@
 namespace jobxx
 {
 
+    enum class park_result
+    {
+        failure = -1,
+        first = 0,
+        second = 1
+    };
+
     class park
     {
     public:
@@ -47,8 +54,8 @@ namespace jobxx
         park(park const&) = delete;
         park& operator=(park const&) = delete;
 
-        void park_until(predicate pred) { park_until(nullptr, pred); }
-        void park_until(park* other, predicate pred);
+        park_result park_until(predicate pred) { return _park(this, pred); }
+        static park_result park_until(park& first, predicate first_pred, park& second, predicate second_pred) { return _park(&first, first_pred, &second, second_pred); }
 
         bool unpark_one();
         void unpark_all();
@@ -60,7 +67,10 @@ namespace jobxx
             thread_state* _thread = nullptr;
             parked_node* _next = this;
             parked_node* _prev = this;
+            int _id = 0;
         };
+
+        static park_result _park(park* first, predicate first_pred, park* second = nullptr, predicate second_pred = predicate());
 
         bool _unpark(thread_state& thread);
         void _link(parked_node& node);

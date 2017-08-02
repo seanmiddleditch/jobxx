@@ -44,63 +44,85 @@ struct jobxx::park::thread_state
     // Linux, Win8+, etc. can sleep on the atomic's value/address (futexes).
     std::mutex _lock;
     std::condition_variable _cond;
-    std::atomic<bool> _parked = false;
+    std::atomic<int> _state = -2;
+
 };
 
-void jobxx::park::park_until(park* other, predicate pred)
+jobxx::park_result jobxx::park::_park(park* first, predicate first_pred, park* second, predicate second_pred)
 {
     thread_local thread_state local_thread;
     thread_state& thread = local_thread; // can't capture thread_local variables in lambdas
 
     // we can't be parked again if we're already parked
-    bool expected = false;
-    if (!thread._parked.compare_exchange_strong(expected, true, std::memory_order_acquire))
+    int expected = -1;
+    if (!thread._state.compare_exchange_strong(expected, -1, std::memory_order_acquire))
     {
-        return;
+        return park_result::failure;
     }
 
     // link into the park(s) that we want to be
     // awoken by. note that our parked state is not
     // guaranteed to still be true by the end of this
     // process, so _wait must deal with that.
-    parked_node node;
-    node._thread = &thread;
-    _link(node);
+    parked_node first_node;
+    first_node._id = 0;
+    first_node._thread = &thread;
+    first->_link(first_node);
 
-    parked_node other_node;
-    if (other != nullptr)
+    if (first_pred && first_pred())
     {
-        other_node._thread = &thread;
-        other->_link(other_node);
+        first->_unlink(first_node);
+        return park_result::first;
     }
 
-    // we check the predicate after parking to 
-    // avoid a race condition: if the predicate fails
-    // for any reason, those reasons must result in an
-    // eventual call to to unpark_one/unpark_all on the
-    // park, so we check the predicate after parking 
-    // but before sleeping. if the condition is
-    // triggered after parking but before the sleep,
-    // we'll be unparked (and the sleep will fail because
-    // the parked flag is unset).
-    if (pred && pred())
+    parked_node second_node;
+    if (second != nullptr)
     {
-        thread._parked = false;
+        first_node._id = 1;
+        second_node._thread = &thread;
+        second->_link(second_node);
+
+        if (second_pred && second_pred())
+        {
+            // we may have been unparked by the prior condition if it triggered after its predicate but before now.
+            if (thread._state.compare_exchange_strong(expected, first_node._id, std::memory_order_seq_cst))
+            {
+                first->_unlink(first_node);
+                second->_unlink(second_node);
+                return park_result::second;
+            }
+        }
     }
-    else
+
+    // we check the predicate after parking to avoid a race condition.
+    // (1) the event may be triggered before parking.
+    // (2) the event may be triggered after parking but before sleeping.
+    // (3) the event may be triggered after sleeping.
+    // the thread state and unpark logic will catch the second two.
+    // the predicate is intended to catch the first. if the predicate
+    // itself were checked before parking, then there would be a gap
+    // of time before checking the predicate and parking in which the
+    // event could be triggered and effectively lost.
     {
         std::unique_lock<std::mutex> lock(thread._lock);
-        thread._cond.wait(lock, [&thread](){ return !thread._parked.load(); });
+        thread._cond.wait(lock, [&thread](){ return thread._state.load() == -1; });
     }
+
+    // determine whom unlocked us, and reset our state back to its default.
+    // note that the state will be either 0 or 1, which indicates which node
+    // unparked this thread; it maps to the park_result values.
+    int const old_state = thread._state.exchange(-2, std::memory_order::memory_order_seq_cst);
 
     // unlink from both parks, because we very possibly were only
     // unlinked by one of them, and we can't leave either with a
     // dangling reference to a node.
-    _unlink(node);
-    if (other != nullptr)
+    first->_unlink(first_node);
+    if (second != nullptr)
     {
-        other->_unlink(other_node);
+        second->_unlink(second_node);
     }
+
+    return static_cast<park_result>(old_state);
 }
 
 bool jobxx::park::unpark_one()
@@ -117,7 +139,9 @@ bool jobxx::park::unpark_one()
 
         // keep looping until we awaken a thread;
         // a thread may already be unparked by another
-        // thread even though it was still in our queue.
+        // unpark operation even though it was still
+        // in our queue, so we cannot assume that its
+        // presence means we unlocked it.
         if (_unpark(*node->_thread))
         {
             return true;
@@ -146,8 +170,8 @@ void jobxx::park::unpark_all()
 bool jobxx::park::_unpark(thread_state& thread)
 {
     // signal a thread to awaken _if_ it's currently parked.
-    bool expected = true;
-    bool const awoken = thread._parked.compare_exchange_strong(expected, false, std::memory_order_release);
+    int expected = -1;
+    bool const awoken = thread._state.compare_exchange_strong(expected, 0, std::memory_order_release);
     if (awoken)
     {
         // the lock is held to avoid a race; condition_variable

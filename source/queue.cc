@@ -54,20 +54,23 @@ void jobxx::queue::wait_job_actively(job const& awaited)
     {
         work_one();
 
-        // FIXME: race condition present.
-        // after parking and before sleeping, both the awaited job may complete
-        // and the task queue may become non-empty. the task queue may then attempt
-        // to unpark this thread expecting it to do work. however, as the job
-        // is complete, we may not see the available task, and not execute it; no
-        // other thread will be unparked even were one available.
-        // if we knew who definitively caused us to awaken we could know for sure
-        // if we need to execute a task or awaken a different thread.
-
         _detail::task* item = nullptr;
-        _impl->waiting.park_until(&awaited._impl->waiting, [this, &awaited, &item]
+        park_result const result = park::park_until(
+            _impl->waiting, [&awaited]{ return awaited.complete(); },
+            awaited._impl->waiting, [this, &item]{ return (item = _impl->pull_task()) != nullptr; });
+
+        // if we were unparked by the task queue, that means that there is work
+        // available. we will only have acquired the task already if it was ready
+        // when the predicate was invoked, not if we actually slept. if we are
+        // unparked by the task queue, that means a task is available and that no
+        // other thread was unparked, so we either must process it or unpark another
+        // thread in order to ensure that the work gets done in a timely manner.
+        // FIXME: this addresses a race condition, but I'm really not happy with the
+        // general design or interface here.
+        if (result == park_result::second && item == nullptr)
         {
-            return awaited.complete() || (item = _impl->pull_task()) != nullptr;
-        });
+            item = _impl->pull_task();
+        }
 
         // we don't want to execute work inside the
         // parkable condition, but we have to act
